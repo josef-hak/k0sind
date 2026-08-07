@@ -1,0 +1,55 @@
+# GoReleaser config — https://goreleaser.com
+# Local test:   make snapshot   (or: goreleaser release --snapshot --clean)
+# Real release: push a git tag vX.Y.Z -> .github/workflows/release.yml runs this.
+version: 2
+
+project_name: k0sind
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: k0sind
+    main: .
+    binary: k0sind
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # kind ships only windows-amd64; match that.
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X github.com/k0sproject/k0sind/internal/version.Version={{ .Version }}
+
+# Publish raw binaries (like kind) so install is a single curl -Lo, e.g.
+# k0sind-linux-amd64, k0sind-darwin-arm64, k0sind-windows-amd64.exe
+archives:
+  - id: default
+    formats:
+      - binary
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  prerelease: auto
+  # First stable line is 0.x; mark <1.0.0 releases clearly.
+  name_template: "k0sind {{ .Tag }}"
