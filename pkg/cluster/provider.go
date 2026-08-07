@@ -67,45 +67,52 @@ func (p *Provider) Create(opts CreateOptions) error {
 	}
 	nodes := plan(opts.Name, cfg, image)
 	controlPlane := nodes[0] // plan guarantees control-plane is first
+	workers := nodes[1:]
 
+	p.logf("Creating cluster %q (1 control-plane, %d worker(s)) ...", opts.Name, len(workers))
+
+	p.logf(" • Ensuring node image (%s)", image)
+	if err := p.docker.Pull(image); err != nil {
+		// Non-fatal: the image may already be present locally.
+		p.logf("   WARNING: could not pull %s: %v", image, err)
+	}
+
+	p.logf(" • Ensuring cluster network %q", Network)
 	if err := p.docker.NetworkEnsure(Network); err != nil {
 		return fmt.Errorf("ensure network: %w", err)
 	}
 
-	p.logf("Ensuring node image (%s) ...", image)
-	if err := p.docker.Pull(image); err != nil {
-		// Non-fatal: the image may already be present locally.
-		p.logf("WARNING: could not pull %s: %v", image, err)
-	}
-
 	// Start control-plane.
-	p.logf("Creating control-plane node %q ...", controlPlane.Name)
+	p.logf(" • Starting control-plane node %q", controlPlane.Name)
 	if _, err := p.docker.Run(controlPlane.runSpec("")); err != nil {
 		return err
 	}
-	if err := waitK0sRunning(p.docker, controlPlane.Name, 3*time.Minute); err != nil {
+	p.logf(" • Waiting for k0s to start on the control-plane")
+	if err := waitK0sRunning(p.docker, controlPlane.Name, 3*time.Minute, p.logf); err != nil {
 		return p.rollback(opts.Name, fmt.Errorf("control-plane did not come up: %w", err))
 	}
+	p.logf(" • Control-plane is up")
 
 	// Join workers using a fresh token per worker.
-	for _, n := range nodes[1:] {
+	for i, n := range workers {
+		p.logf(" • Joining worker %q (%d/%d)", n.Name, i+1, len(workers))
 		token, err := p.docker.Exec(controlPlane.Name, "k0s", "token", "create", "--role=worker")
 		if err != nil {
 			return p.rollback(opts.Name, fmt.Errorf("create worker token: %w", err))
 		}
-		p.logf("Creating worker node %q ...", n.Name)
 		if _, err := p.docker.Run(n.runSpec(token)); err != nil {
 			return p.rollback(opts.Name, err)
 		}
 	}
 
 	if opts.Wait > 0 {
-		p.logf("Waiting up to %s for %d node(s) to be Ready ...", opts.Wait, len(nodes))
-		if err := waitNodesReady(p.docker, controlPlane.Name, len(nodes), opts.Wait); err != nil {
+		p.logf(" • Waiting up to %s for %d node(s) to be Ready", opts.Wait, len(nodes))
+		if err := waitNodesReady(p.docker, controlPlane.Name, len(nodes), opts.Wait, p.logf); err != nil {
 			return p.rollback(opts.Name, err)
 		}
 	}
 
+	p.logf(" • Exporting kubeconfig (context %q)", kubeconfig.ContextName(opts.Name))
 	if err := p.exportKubeconfig(opts.Name, controlPlane.Name); err != nil {
 		return p.rollback(opts.Name, fmt.Errorf("export kubeconfig: %w", err))
 	}
