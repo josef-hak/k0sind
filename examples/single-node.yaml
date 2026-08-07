@@ -1,0 +1,9 @@
+# A single-node k0s cluster (control-plane also schedules workloads).
+# Usage: k0sind create cluster --config examples/single-node.yaml --name dev
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080

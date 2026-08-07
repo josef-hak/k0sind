@@ -1,0 +1,60 @@
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/k0sproject/k0sind/pkg/cluster"
+	"github.com/spf13/cobra"
+)
+
+func newGetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get",
+		Short: "List clusters or nodes",
+	}
+	cmd.AddCommand(newGetClustersCmd(), newGetNodesCmd())
+	return cmd
+}
+
+func newGetClustersCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "clusters",
+		Short: "List k0sind clusters",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			names, err := cluster.NewProvider().List()
+			if err != nil {
+				return err
+			}
+			if len(names) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No k0sind clusters found.")
+				return nil
+			}
+			for _, n := range names {
+				fmt.Fprintln(cmd.OutOrStdout(), n)
+			}
+			return nil
+		},
+	}
+}
+
+func newGetNodesCmd() *cobra.Command {
+	var name string
+	cmd := &cobra.Command{
+		Use:   "nodes",
+		Short: "List the nodes of a cluster",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodes, err := cluster.NewProvider().ListNodes(name)
+			if err != nil {
+				return err
+			}
+			for _, n := range nodes {
+				fmt.Fprintln(cmd.OutOrStdout(), n)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "cluster name (default \"k0sind\")")
+	return cmd
+}

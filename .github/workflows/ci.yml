@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, poc]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-ed:"; echo "$unformatted"; exit 1
+          fi
+      - run: go vet ./...
+      - run: go build ./...
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Unit tests (no docker)
+        run: go test ./... -race -coverprofile=cover.out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: cover.out
+
+  e2e:
+    needs: [lint-build, unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - name: single-node
+            test: TestCreateSingleNode
+          - name: ha-1cp-2w
+            test: TestCreateOneControlPlaneTwoWorkers
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build k0sind
+        run: go build -o /usr/local/bin/k0sind .
+      - name: Run e2e scenario (${{ matrix.scenario.name }})
+        env:
+          K0SIND_BIN: /usr/local/bin/k0sind
+        run: go test -tags e2e ./test/e2e/... -run '${{ matrix.scenario.test }}' -v -timeout 20m
+      - name: Diagnostics on failure
+        if: always()
+        run: |
+          echo "=== containers ==="
+          docker ps -a --filter label=io.k0sind.cluster || true
+          for c in $(docker ps -aq --filter label=io.k0sind.role=control-plane); do
+            echo "=== logs $c ==="; docker logs --tail 100 "$c" || true
+            echo "=== pods $c ==="; docker exec "$c" k0s kubectl get pods -A || true
+          done
