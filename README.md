@@ -17,15 +17,16 @@ is small: it is essentially a translator from a kind config into
 ## Installing From Release Binaries
 
 Download the `k0sind` binary for your platform from the
-[releases](https://github.com/k0sproject/k0sind/releases) page.
+[releases](https://github.com/josef-hak/k0sind/releases) page.
 
 ### Linux
 
 ```bash
+VERSION=v0.1.0
 # For AMD64 / x86_64
-[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind https://github.com/k0sproject/k0sind/releases/download/v0.1.0/k0sind-linux-amd64
+[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-linux-amd64"
 # For ARM64
-[ $(uname -m) = aarch64 ] && curl -Lo ./k0sind https://github.com/k0sproject/k0sind/releases/download/v0.1.0/k0sind-linux-arm64
+[ $(uname -m) = aarch64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-linux-arm64"
 chmod +x ./k0sind
 sudo mv ./k0sind /usr/local/bin/k0sind
 ```
@@ -33,10 +34,11 @@ sudo mv ./k0sind /usr/local/bin/k0sind
 ### macOS
 
 ```bash
+VERSION=v0.1.0
 # For Intel Macs
-[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind https://github.com/k0sproject/k0sind/releases/download/v0.1.0/k0sind-darwin-amd64
+[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-darwin-amd64"
 # For M1 / ARM Macs
-[ $(uname -m) = arm64 ] && curl -Lo ./k0sind https://github.com/k0sproject/k0sind/releases/download/v0.1.0/k0sind-darwin-arm64
+[ $(uname -m) = arm64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-darwin-arm64"
 chmod +x ./k0sind
 mv ./k0sind /some-dir-in-your-PATH/k0sind
 ```
@@ -44,14 +46,9 @@ mv ./k0sind /some-dir-in-your-PATH/k0sind
 ### Windows (PowerShell)
 
 ```powershell
-curl.exe -Lo k0sind-windows-amd64.exe https://github.com/k0sproject/k0sind/releases/download/v0.1.0/k0sind-windows-amd64.exe
+VERSION=v0.1.0
+curl.exe -Lo k0sind-windows-amd64.exe "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-windows-amd64.exe"
 Move-Item .\k0sind-windows-amd64.exe c:\some-dir-in-your-PATH\k0sind.exe
-```
-
-### With Go
-
-```sh
-go install github.com/k0sproject/k0sind@latest
 ```
 
 ### From source
@@ -69,7 +66,7 @@ make build && ./bin/k0sind version
 k0sind create cluster --wait 120s
 
 # From a kind-compatible config
-k0sind create cluster --name dev --config examples/multi-node.yaml --wait 180s
+k0sind create cluster -n dev --config examples/multi-node.yaml --wait 180s
 
 # Point kubectl at it
 kubectl config use-context k0sind-dev
@@ -77,16 +74,16 @@ kubectl get nodes
 
 # Housekeeping
 k0sind get clusters
-k0sind get nodes --name dev
-k0sind export kubeconfig --name dev
-k0sind delete cluster --name dev
+k0sind get nodes -n dev
+k0sind export kubeconfig -n dev
+k0sind delete cluster -n dev
 ```
 
 ### Flags (`create cluster`)
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--name` | `k0sind` | Cluster name (also the kubeconfig context `k0sind-<name>`) |
+| `-n` | `k0sind` | Cluster name (also the kubeconfig context `k0sind-<name>`) |
 | `--config` | – | Path to a kind-compatible config file |
 | `--image` | pinned k0s release | k0s node image override |
 | `--wait` | `0` | Wait for all nodes to be `Ready` (e.g. `120s`); `0` returns once started |
