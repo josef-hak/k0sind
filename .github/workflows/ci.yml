@@ -20,7 +20,7 @@ jobs:
   lint-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -37,7 +37,7 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -52,6 +52,7 @@ jobs:
   e2e:
     # Independent of lint-build/unit so it runs in parallel with them (e2e is the
     # long pole; a build error still fails the "Build k0sind" step below).
+    name: e2e (${{ matrix.scenario.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -63,7 +64,7 @@ jobs:
           - name: 1cp-2w
             test: TestCreateOneControlPlaneTwoWorkers
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
