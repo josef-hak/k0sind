@@ -50,7 +50,8 @@ jobs:
           path: cover.out
 
   e2e:
-    needs: [lint-build, unit]
+    # Independent of lint-build/unit so it runs in parallel with them (e2e is the
+    # long pole; a build error still fails the "Build k0sind" step below).
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -59,7 +60,7 @@ jobs:
         scenario:
           - name: single-node
             test: TestCreateSingleNode
-          - name: ha-1cp-2w
+          - name: 1cp-2w
             test: TestCreateOneControlPlaneTwoWorkers
     steps:
       - uses: actions/checkout@v4

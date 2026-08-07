@@ -62,44 +62,61 @@ func runScenario(t *testing.T, name string, extraArgs []string, wantNodes int, w
 		t.Fatalf("expected %d Ready nodes, got %d\n%s", wantNodes, ready, out)
 	}
 
-	// A workload must be schedulable and actually reach Ready.
+	// A workload must be schedulable...
 	if _, err := docker(t, "exec", cp, "k0s", "kubectl", "run", "probe",
 		"--image=registry.k8s.io/pause:3.9", "--restart=Never"); err != nil {
 		t.Fatalf("run probe pod: %v", err)
 	}
-	waitPodReady(t, cp, "probe", 90*time.Second)
+	// ...and the whole cluster (system pods across every node + our probe) must
+	// converge to Ready.
+	waitClusterPodsReady(t, cp, 120*time.Second)
 }
 
-// waitPodReady polls `kubectl get pods` every 2s, logging the output each time,
-// until the named pod is Running with all containers Ready (or timeout).
-func waitPodReady(t *testing.T, cp, pod string, timeout time.Duration) {
+// waitClusterPodsReady polls `kubectl get pods -A -o wide` every 2s, logging the
+// full output (so all nodes' pods are visible), until every pod is Ready or
+// Completed — or the timeout is hit.
+func waitClusterPodsReady(t *testing.T, cp string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for {
-		out, _ := docker(t, "exec", cp, "k0s", "kubectl", "get", "pods", "-o", "wide")
-		t.Logf("waiting for pod %q to be Ready:\n%s", pod, strings.TrimRight(out, "\n"))
-		if podReady(out, pod) {
-			t.Logf("pod %q is Ready", pod)
+		out, _ := docker(t, "exec", cp, "k0s", "kubectl", "get", "pods", "-A", "-o", "wide")
+		t.Logf("waiting for all cluster pods to be Ready:\n%s", strings.TrimRight(out, "\n"))
+		if allPodsReady(out) {
+			t.Logf("all cluster pods are Ready")
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("pod %q did not become Ready within %s", pod, timeout)
+			t.Fatalf("cluster pods did not all become Ready within %s", timeout)
 		}
 		time.Sleep(2 * time.Second)
 	}
 }
 
-// podReady reports whether `kubectl get pods` output shows pod as Running with
-// all containers ready (READY column N/N, N > 0).
-func podReady(out, pod string) bool {
-	for _, line := range strings.Split(out, "\n") {
+// allPodsReady parses `kubectl get pods -A` output (NAMESPACE NAME READY STATUS
+// ...) and reports whether every listed pod is Running with all containers ready
+// (READY N/N, N>0) or has Completed. Returns false for header-only/empty output.
+func allPodsReady(out string) bool {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) <= 1 {
+		return false // header only or nothing scheduled yet
+	}
+	for _, line := range lines[1:] { // skip the header row
 		f := strings.Fields(line)
-		if len(f) < 3 || f[0] != pod {
+		if len(f) < 4 {
 			continue
 		}
-		ready, status := f[1], f[2]
-		n, d, ok := strings.Cut(ready, "/")
-		return ok && n == d && n != "0" && status == "Running"
+		ready, status := f[2], f[3]
+		switch status {
+		case "Completed", "Succeeded":
+			continue
+		case "Running":
+			n, d, ok := strings.Cut(ready, "/")
+			if !ok || n != d || n == "0" {
+				return false
+			}
+		default:
+			return false
+		}
 	}
-	return false
+	return true
 }
