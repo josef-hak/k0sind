@@ -8,6 +8,15 @@ import (
 )
 
 func newCreateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a cluster",
+	}
+	cmd.AddCommand(newCreateClusterCmd())
+	return cmd
+}
+
+func newCreateClusterCmd() *cobra.Command {
 	var (
 		name   string
 		config string
@@ -15,9 +24,9 @@ func newCreateCmd() *cobra.Command {
 		wait   time.Duration
 	)
 	cmd := &cobra.Command{
-		Use:   "create cluster",
+		Use:   "cluster",
 		Short: "Create a k0s cluster in Docker",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cluster.NewProvider().Create(cluster.CreateOptions{
 				Name:       name,

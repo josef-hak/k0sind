@@ -209,6 +209,11 @@ func (p *Provider) Delete(name string) error {
 		p.logf("WARNING: could not update kubeconfig: %v", err)
 	}
 
+	if len(ids) == 0 {
+		p.logf("No cluster named %q found.", name)
+		return nil
+	}
+
 	// Drop the shared network when no k0sind clusters remain.
 	if remaining, err := p.docker.PS(LabelCluster); err == nil && len(remaining) == 0 {
 		_ = p.docker.NetworkRemove(Network)
