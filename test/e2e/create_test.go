@@ -62,9 +62,44 @@ func runScenario(t *testing.T, name string, extraArgs []string, wantNodes int, w
 		t.Fatalf("expected %d Ready nodes, got %d\n%s", wantNodes, ready, out)
 	}
 
-	// A workload must be schedulable.
+	// A workload must be schedulable and actually reach Ready.
 	if _, err := docker(t, "exec", cp, "k0s", "kubectl", "run", "probe",
 		"--image=registry.k8s.io/pause:3.9", "--restart=Never"); err != nil {
 		t.Fatalf("run probe pod: %v", err)
 	}
+	waitPodReady(t, cp, "probe", 90*time.Second)
+}
+
+// waitPodReady polls `kubectl get pods` every 2s, logging the output each time,
+// until the named pod is Running with all containers Ready (or timeout).
+func waitPodReady(t *testing.T, cp, pod string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		out, _ := docker(t, "exec", cp, "k0s", "kubectl", "get", "pods", "-o", "wide")
+		t.Logf("waiting for pod %q to be Ready:\n%s", pod, strings.TrimRight(out, "\n"))
+		if podReady(out, pod) {
+			t.Logf("pod %q is Ready", pod)
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("pod %q did not become Ready within %s", pod, timeout)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+// podReady reports whether `kubectl get pods` output shows pod as Running with
+// all containers ready (READY column N/N, N > 0).
+func podReady(out, pod string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 3 || f[0] != pod {
+			continue
+		}
+		ready, status := f[1], f[2]
+		n, d, ok := strings.Cut(ready, "/")
+		return ok && n == d && n != "0" && status == "Running"
+	}
+	return false
 }
