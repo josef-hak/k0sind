@@ -1,9 +1,17 @@
 name: CI
 
 on:
+  # Run on direct pushes to main, and on pull requests. Feature branches are
+  # covered by their PR, so pushing a branch that has an open PR triggers a
+  # single run (the pull_request event) instead of push + pull_request.
   push:
-    branches: [main, poc]
+    branches: [main]
   pull_request:
+
+# Cancel superseded runs for the same ref (e.g. rapid pushes to a PR branch).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
