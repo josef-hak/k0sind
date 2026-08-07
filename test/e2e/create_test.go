@@ -80,7 +80,7 @@ func waitClusterPodsReady(t *testing.T, cp string, timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	for {
 		out, _ := docker(t, "exec", cp, "k0s", "kubectl", "get", "pods", "-A", "-o", "wide")
-		t.Logf("waiting for all cluster pods to be Ready:\n%s", strings.TrimRight(out, "\n"))
+		t.Logf("waiting for all cluster pods to be Ready:\n%s", trimWideColumns(out))
 		if allPodsReady(out) {
 			t.Logf("all cluster pods are Ready")
 			return
@@ -90,6 +90,24 @@ func waitClusterPodsReady(t *testing.T, cp string, timeout time.Duration) {
 		}
 		time.Sleep(2 * time.Second)
 	}
+}
+
+// trimWideColumns drops the trailing "NOMINATED NODE" and "READINESS GATES"
+// columns from `kubectl get pods -o wide` output (almost always <none>) while
+// keeping NODE. It truncates each line at the header offset of the first dropped
+// column, which is robust to variable-width fields such as RESTARTS "0 (5m ago)".
+func trimWideColumns(out string) string {
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	cut := strings.Index(lines[0], "NOMINATED NODE")
+	if cut < 0 {
+		return strings.Join(lines, "\n")
+	}
+	for i, line := range lines {
+		if len(line) > cut {
+			lines[i] = strings.TrimRight(line[:cut], " ")
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // allPodsReady parses `kubectl get pods -A` output (NAMESPACE NAME READY STATUS
