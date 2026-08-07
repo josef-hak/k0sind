@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/k0sproject/k0sind/internal/status"
 	"github.com/k0sproject/k0sind/pkg/config"
 	"github.com/k0sproject/k0sind/pkg/docker"
 	"github.com/k0sproject/k0sind/pkg/kubeconfig"
@@ -17,11 +18,24 @@ import (
 type Provider struct {
 	docker *docker.Client
 	out    io.Writer
+	status *status.Status
 }
 
 // NewProvider returns a Provider backed by the real docker CLI, logging to stderr.
 func NewProvider() *Provider {
-	return &Provider{docker: docker.New(), out: os.Stderr}
+	out := os.Stderr
+	return &Provider{docker: docker.New(), out: out, status: status.New(out)}
+}
+
+// step runs a named phase with spinner/✓ progress, marking it ✗ on error.
+func (p *Provider) step(msg string, fn func() error) error {
+	p.status.Start(msg)
+	if err := fn(); err != nil {
+		p.status.Fail()
+		return err
+	}
+	p.status.Done()
+	return nil
 }
 
 // CreateOptions configures cluster creation.
@@ -71,49 +85,60 @@ func (p *Provider) Create(opts CreateOptions) error {
 
 	p.logf("Creating cluster %q (1 control-plane, %d worker(s)) ...", opts.Name, len(workers))
 
-	p.logf(" • Ensuring node image (%s)", image)
-	if err := p.docker.Pull(image); err != nil {
-		// Non-fatal: the image may already be present locally.
-		p.logf("   WARNING: could not pull %s: %v", image, err)
-	}
-
-	p.logf(" • Ensuring cluster network %q", Network)
-	if err := p.docker.NetworkEnsure(Network); err != nil {
-		return fmt.Errorf("ensure network: %w", err)
-	}
-
-	// Start control-plane.
-	p.logf(" • Starting control-plane node %q", controlPlane.Name)
-	if _, err := p.docker.Run(controlPlane.runSpec("")); err != nil {
+	if err := p.step(fmt.Sprintf("Ensuring node image (%s)", image), func() error {
+		// Best-effort: the image may already be present locally, and the
+		// control-plane run below will fail clearly if it is genuinely missing.
+		_ = p.docker.Pull(image)
+		return nil
+	}); err != nil {
 		return err
 	}
-	p.logf(" • Waiting for k0s to start on the control-plane")
-	if err := waitK0sRunning(p.docker, controlPlane.Name, 3*time.Minute, p.logf); err != nil {
+
+	if err := p.step(fmt.Sprintf("Ensuring cluster network %q", Network), func() error {
+		return p.docker.NetworkEnsure(Network)
+	}); err != nil {
+		return err
+	}
+
+	if err := p.step(fmt.Sprintf("Starting control-plane node %q", controlPlane.Name), func() error {
+		_, e := p.docker.Run(controlPlane.runSpec(""))
+		return e
+	}); err != nil {
+		return p.rollback(opts.Name, err)
+	}
+
+	if err := p.step("Waiting for the control-plane to be ready", func() error {
+		return waitK0sRunning(p.docker, controlPlane.Name, 3*time.Minute, p.status.Update)
+	}); err != nil {
 		return p.rollback(opts.Name, fmt.Errorf("control-plane did not come up: %w", err))
 	}
-	p.logf(" • Control-plane is up")
 
 	// Join workers using a fresh token per worker.
 	for i, n := range workers {
-		p.logf(" • Joining worker %q (%d/%d)", n.Name, i+1, len(workers))
-		token, err := p.docker.Exec(controlPlane.Name, "k0s", "token", "create", "--role=worker")
-		if err != nil {
-			return p.rollback(opts.Name, fmt.Errorf("create worker token: %w", err))
-		}
-		if _, err := p.docker.Run(n.runSpec(token)); err != nil {
+		n := n
+		if err := p.step(fmt.Sprintf("Joining worker node %q (%d/%d)", n.Name, i+1, len(workers)), func() error {
+			token, e := p.docker.Exec(controlPlane.Name, "k0s", "token", "create", "--role=worker")
+			if e != nil {
+				return fmt.Errorf("create worker token: %w", e)
+			}
+			_, e = p.docker.Run(n.runSpec(token))
+			return e
+		}); err != nil {
 			return p.rollback(opts.Name, err)
 		}
 	}
 
 	if opts.Wait > 0 {
-		p.logf(" • Waiting up to %s for %d node(s) to be Ready", opts.Wait, len(nodes))
-		if err := waitNodesReady(p.docker, controlPlane.Name, len(nodes), opts.Wait, p.logf); err != nil {
+		if err := p.step(fmt.Sprintf("Waiting for %d node(s) to be Ready", len(nodes)), func() error {
+			return waitNodesReady(p.docker, controlPlane.Name, len(nodes), opts.Wait, p.status.Update)
+		}); err != nil {
 			return p.rollback(opts.Name, err)
 		}
 	}
 
-	p.logf(" • Exporting kubeconfig (context %q)", kubeconfig.ContextName(opts.Name))
-	if err := p.exportKubeconfig(opts.Name, controlPlane.Name); err != nil {
+	if err := p.step(fmt.Sprintf("Exporting kubeconfig (context %q)", kubeconfig.ContextName(opts.Name)), func() error {
+		return p.exportKubeconfig(opts.Name, controlPlane.Name)
+	}); err != nil {
 		return p.rollback(opts.Name, fmt.Errorf("export kubeconfig: %w", err))
 	}
 

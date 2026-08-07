@@ -140,9 +140,11 @@ func (c *Client) NetworkRemove(name string) error {
 	return err
 }
 
-// Pull fetches the image, streaming progress.
+// Pull fetches the image quietly (progress is captured, not streamed) so it does
+// not interfere with the spinner; callers surface phase status instead.
 func (c *Client) Pull(image string) error {
-	return c.r.Stream("pull", image)
+	_, err := c.r.Output("pull", image)
+	return err
 }
 
 // Run creates and starts a container from the spec, returning its ID.
