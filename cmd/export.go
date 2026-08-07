@@ -24,6 +24,6 @@ func newExportKubeconfigCmd() *cobra.Command {
 			return cluster.NewProvider().ExportKubeconfig(name)
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", "cluster name (default \"k0sind\")")
+	cmd.Flags().StringVarP(&name, "name", "n", "", "cluster name (default \"k0sind\")")
 	return cmd
 }

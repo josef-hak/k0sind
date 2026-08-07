@@ -27,7 +27,7 @@ func newCreateCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", "cluster name (default \"k0sind\")")
+	cmd.Flags().StringVarP(&name, "name", "n", "", "cluster name (default \"k0sind\")")
 	cmd.Flags().StringVar(&config, "config", "", "path to a kind-compatible config file")
 	cmd.Flags().StringVar(&image, "image", "", "k0s node image to use (overrides the default)")
 	cmd.Flags().DurationVar(&wait, "wait", 0, "wait for all nodes to be Ready (e.g. 120s); 0 disables waiting")
