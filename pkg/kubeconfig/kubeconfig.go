@@ -85,6 +85,17 @@ func Remove(clusterName string) error {
 	return clientcmd.WriteToFile(*cfg, path)
 }
 
+// Rewrite normalizes the raw k0s admin kubeconfig, renaming entries to
+// k0sind-<name> and pointing the server at host:port. It returns the
+// serialized kubeconfig YAML.
+func Rewrite(clusterName string, rawAdmin []byte, host, port string) ([]byte, error) {
+	cfg, err := rewrite(clusterName, rawAdmin, host, port)
+	if err != nil {
+		return nil, err
+	}
+	return clientcmd.Write(*cfg)
+}
+
 // rewrite normalizes the single-entry k0s admin kubeconfig: it renames the
 // cluster/user/context to the k0sind key and points the server at host:port.
 func rewrite(clusterName string, raw []byte, host, port string) (*clientcmdapi.Config, error) {
