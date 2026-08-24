@@ -10,9 +10,9 @@ import (
 func newGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get",
-		Short: "List clusters or nodes",
+		Short: "Display clusters, nodes, or kubeconfig",
 	}
-	cmd.AddCommand(newGetClustersCmd(), newGetNodesCmd())
+	cmd.AddCommand(newGetClustersCmd(), newGetNodesCmd(), newGetKubeconfigCmd())
 	return cmd
 }
 
@@ -36,6 +36,25 @@ func newGetClustersCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newGetKubeconfigCmd() *cobra.Command {
+	var name string
+	cmd := &cobra.Command{
+		Use:   "kubeconfig",
+		Short: "Print the kubeconfig for a cluster",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			data, err := cluster.NewProvider().GetKubeconfig(name)
+			if err != nil {
+				return err
+			}
+			_, err = cmd.OutOrStdout().Write(data)
+			return err
+		},
+	}
+	cmd.Flags().StringVarP(&name, "name", "n", "", "cluster name (default \"k0sind\")")
+	return cmd
 }
 
 func newGetNodesCmd() *cobra.Command {
