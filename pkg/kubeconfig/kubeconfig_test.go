@@ -77,6 +77,36 @@ func TestMergeAndRemove(t *testing.T) {
 	}
 }
 
+func TestRewrite(t *testing.T) {
+	data, err := Rewrite("dev", []byte(adminKubeconfig), "127.0.0.1", "49153")
+	if err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	cfg, err := clientcmd.Load(data)
+	if err != nil {
+		t.Fatalf("parse rewritten kubeconfig: %v", err)
+	}
+	key := ContextName("dev")
+	if cfg.CurrentContext != key {
+		t.Fatalf("current-context = %q, want %q", cfg.CurrentContext, key)
+	}
+	cl, ok := cfg.Clusters[key]
+	if !ok {
+		t.Fatalf("cluster %q missing", key)
+	}
+	if cl.Server != "https://127.0.0.1:49153" {
+		t.Fatalf("server = %q, want %q", cl.Server, "https://127.0.0.1:49153")
+	}
+	if _, ok := cfg.AuthInfos[key]; !ok {
+		t.Fatalf("user %q missing", key)
+	}
+	if ctx, ok := cfg.Contexts[key]; !ok {
+		t.Fatalf("context %q missing", key)
+	} else if ctx.Cluster != key || ctx.AuthInfo != key {
+		t.Fatalf("context references wrong cluster/user: %q/%q", ctx.Cluster, ctx.AuthInfo)
+	}
+}
+
 func TestRemoveMissingFileIsNoError(t *testing.T) {
 	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "does-not-exist"))
 	if err := Remove("dev"); err != nil {
