@@ -166,22 +166,27 @@ func (p *Provider) exportKubeconfig(clusterName, controlPlane string) error {
 	return kubeconfig.Merge(clusterName, []byte(raw), host, port)
 }
 
-// GetKubeconfig returns the rewritten admin kubeconfig YAML for an existing cluster.
-func (p *Provider) GetKubeconfig(name string) ([]byte, error) {
+// GetKubeconfig returns the rewritten admin kubeconfig YAML for an existing
+// cluster. When internal is true, the original in-container API server address
+// is preserved instead of being rewritten to the host-mapped port.
+func (p *Provider) GetKubeconfig(name string, internal bool) ([]byte, error) {
 	if name == "" {
 		name = config.DefaultClusterName
 	}
 	cp := name + "-control-plane"
-	host, port, err := p.docker.Port(cp, apiContainerPort)
-	if err != nil {
-		return nil, fmt.Errorf("discover API server port: %w", err)
-	}
-	if host == "0.0.0.0" || host == "" || host == "::" {
-		host = config.DefaultAPIServerAddress
-	}
 	raw, err := p.docker.Exec(cp, "k0s", "kubeconfig", "admin")
 	if err != nil {
 		return nil, err
+	}
+	var host, port string
+	if !internal {
+		host, port, err = p.docker.Port(cp, apiContainerPort)
+		if err != nil {
+			return nil, fmt.Errorf("discover API server port: %w", err)
+		}
+		if host == "0.0.0.0" || host == "" || host == "::" {
+			host = config.DefaultAPIServerAddress
+		}
 	}
 	return kubeconfig.Rewrite(name, []byte(raw), host, port)
 }

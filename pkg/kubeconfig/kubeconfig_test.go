@@ -107,6 +107,25 @@ func TestRewrite(t *testing.T) {
 	}
 }
 
+func TestRewriteInternal(t *testing.T) {
+	data, err := Rewrite("dev", []byte(adminKubeconfig), "", "")
+	if err != nil {
+		t.Fatalf("rewrite internal: %v", err)
+	}
+	cfg, err := clientcmd.Load(data)
+	if err != nil {
+		t.Fatalf("parse rewritten kubeconfig: %v", err)
+	}
+	key := ContextName("dev")
+	cl, ok := cfg.Clusters[key]
+	if !ok {
+		t.Fatalf("cluster %q missing", key)
+	}
+	if cl.Server != "https://172.18.0.2:6443" {
+		t.Fatalf("server = %q, want original internal address", cl.Server)
+	}
+}
+
 func TestRemoveMissingFileIsNoError(t *testing.T) {
 	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "does-not-exist"))
 	if err := Remove("dev"); err != nil {

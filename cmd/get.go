@@ -40,12 +40,13 @@ func newGetClustersCmd() *cobra.Command {
 
 func newGetKubeconfigCmd() *cobra.Command {
 	var name string
+	var internal bool
 	cmd := &cobra.Command{
 		Use:   "kubeconfig",
 		Short: "Print the kubeconfig for a cluster",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := cluster.NewProvider().GetKubeconfig(name)
+			data, err := cluster.NewProvider().GetKubeconfig(name, internal)
 			if err != nil {
 				return err
 			}
@@ -54,6 +55,7 @@ func newGetKubeconfigCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "cluster name (default \"k0sind\")")
+	cmd.Flags().BoolVar(&internal, "internal", false, "use internal address instead of host-mapped port")
 	return cmd
 }
 

@@ -98,17 +98,19 @@ func Rewrite(clusterName string, rawAdmin []byte, host, port string) ([]byte, er
 
 // rewrite normalizes the single-entry k0s admin kubeconfig: it renames the
 // cluster/user/context to the k0sind key and points the server at host:port.
+// When host is empty the original server address is preserved (internal mode).
 func rewrite(clusterName string, raw []byte, host, port string) (*clientcmdapi.Config, error) {
 	cfg, err := clientcmd.Load(raw)
 	if err != nil {
 		return nil, fmt.Errorf("parse admin kubeconfig: %w", err)
 	}
 	key := ContextName(clusterName)
-	server := fmt.Sprintf("https://%s:%s", host, port)
 
 	out := clientcmdapi.NewConfig()
 	for _, cl := range cfg.Clusters {
-		cl.Server = server
+		if host != "" {
+			cl.Server = fmt.Sprintf("https://%s:%s", host, port)
+		}
 		out.Clusters[key] = cl
 		break
 	}
