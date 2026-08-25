@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -40,10 +41,11 @@ func (p *Provider) step(msg string, fn func() error) error {
 
 // CreateOptions configures cluster creation.
 type CreateOptions struct {
-	Name       string
-	ConfigPath string
-	Image      string        // overrides config/default image
-	Wait       time.Duration // 0 = return once nodes are started, don't wait for Ready
+	Name          string
+	ConfigPath    string
+	K0sConfigPath string        // optional path to a k0s.yaml config file
+	Image         string        // overrides config/default image
+	Wait          time.Duration // 0 = return once nodes are started, don't wait for Ready
 }
 
 func (p *Provider) logf(format string, a ...any) {
@@ -79,7 +81,13 @@ func (p *Provider) Create(opts CreateOptions) error {
 	if image == "" {
 		image = DefaultImage
 	}
-	nodes := plan(opts.Name, cfg, image)
+	k0sCfg := opts.K0sConfigPath
+	if k0sCfg != "" {
+		if abs, err := filepath.Abs(k0sCfg); err == nil {
+			k0sCfg = abs
+		}
+	}
+	nodes := plan(opts.Name, cfg, image, k0sCfg)
 	controlPlane := nodes[0] // plan guarantees control-plane is first
 	workers := nodes[1:]
 
