@@ -111,7 +111,7 @@ the parts of the kind schema that map to k0s and warns about the rest.
 These are ignored because k0s does not use kubeadm and manages CNI/networking
 through its own `k0s.yaml`. Mapping them onto k0s config is future work.
 
-## Topology (v0.1.0)
+## Topology
 
 - **1 control-plane + N workers.** The control-plane runs
   `k0s controller --enable-worker`; workers join with a token
