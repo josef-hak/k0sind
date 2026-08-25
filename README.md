@@ -21,7 +21,7 @@ Download the `k0sind` binary for your platform from the
 
 ### Linux
 
-```bash
+~~~bash
 VERSION=v1.1.0
 # For AMD64 / x86_64
 [ $(uname -m) = x86_64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-linux-amd64"
@@ -29,11 +29,11 @@ VERSION=v1.1.0
 [ $(uname -m) = aarch64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-linux-arm64"
 chmod +x ./k0sind
 sudo mv ./k0sind /usr/local/bin/k0sind
-```
+~~~
 
 ### macOS
 
-```bash
+~~~bash
 VERSION=v1.1.0
 # For Intel Macs
 [ $(uname -m) = x86_64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-darwin-amd64"
@@ -41,27 +41,27 @@ VERSION=v1.1.0
 [ $(uname -m) = arm64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-darwin-arm64"
 chmod +x ./k0sind
 mv ./k0sind /some-dir-in-your-PATH/k0sind
-```
+~~~
 
 ### Windows (PowerShell)
 
-```powershell
+~~~powershell
 VERSION=v1.1.0
 curl.exe -Lo k0sind-windows-amd64.exe "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-windows-amd64.exe"
 Move-Item .\k0sind-windows-amd64.exe c:\some-dir-in-your-PATH\k0sind.exe
-```
+~~~
 
 ### From source
 
-```sh
+~~~bash
 make install                       # into $GOBIN, version stamped in
 # or
 make build && ./bin/k0sind version
-```
+~~~
 
 ## Usage
 
-```sh
+~~~bash
 # Single-node cluster (control-plane also schedules workloads)
 k0sind create cluster --wait 120s
 
@@ -78,7 +78,16 @@ k0sind get nodes -n dev
 k0sind get kubeconfig -n dev
 k0sind export kubeconfig -n dev
 k0sind delete cluster -n dev
-```
+~~~
+
+### Advanced usage
+~~~bash
+# Create k0s cluster with OpenEBS default Storage Class pre-installed
+k0sind create cluster -n k0s-ebs --k0s-config examples/k0s-openebs.yaml
+
+# Create k0s cluster with Calico network provider
+k0sind create cluster -n k0s-calico --k0s-config examples/k0s-calico.yaml
+~~~
 
 ### Flags (`create cluster`)
 
@@ -114,11 +123,11 @@ through its own `k0s.yaml`. Mapping them onto k0s config is future work.
 
 ## Development
 
-```sh
+~~~bash
 go build ./...
 go test ./... -race            # unit tests, no docker
 go test -tags e2e ./test/e2e/... -timeout 20m   # spins up real clusters
-```
+~~~
 
 CI (`.github/workflows/ci.yml`) runs three jobs: `lint-build` (gofmt/vet/build),
 `unit`, and `e2e` (a matrix of the single-node and 1cp+2w scenarios).
@@ -127,14 +136,14 @@ CI (`.github/workflows/ci.yml`) runs three jobs: `lint-build` (gofmt/vet/build),
 
 Releases are automated with [GoReleaser](https://goreleaser.com).
 
-```sh
+~~~bash
 # test the full release build locally (no publishing) -> ./dist
 make snapshot
 
 # cut a real release: tag and push
 git tag v0.1.0
 git push origin v0.1.0
-```
+~~~
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml`, which vets, tests,
 then builds the raw `k0sind-<os>-<arch>` binaries (Linux/macOS amd64+arm64,
