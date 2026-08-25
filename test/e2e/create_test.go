@@ -21,11 +21,44 @@ func k0sindBin(t *testing.T) string {
 }
 
 func TestCreateSingleNode(t *testing.T) {
+	t.Parallel()
 	runScenario(t, "ci-single", nil, 1, 120*time.Second)
 }
 
 func TestCreateOneControlPlaneTwoWorkers(t *testing.T) {
+	t.Parallel()
 	runScenario(t, "ci-multi", []string{"--config", "../../examples/multi-node.yaml"}, 3, 180*time.Second)
+}
+
+func TestCreateWithCalico(t *testing.T) {
+	t.Parallel()
+	runScenario(t, "ci-calico", []string{"--k0s-config", "../../examples/k0s-calico.yaml"}, 1, 120*time.Second)
+	// Verify Calico is the active network provider (not the default kube-router).
+	assertPodExists(t, "ci-calico-control-plane", "kube-system", "calico-node")
+}
+
+func TestCreateWithOpenEBS(t *testing.T) {
+	t.Parallel()
+	runScenario(t, "ci-openebs", []string{"--k0s-config", "../../examples/k0s-openebs.yaml"}, 1, 180*time.Second)
+	// Verify the OpenEBS helm extension deployed pods.
+	assertPodExists(t, "ci-openebs-control-plane", "openebs", "openebs")
+}
+
+// assertPodExists checks that at least one pod whose name contains substr
+// exists in the given namespace.
+func assertPodExists(t *testing.T, cp, namespace, substr string) {
+	t.Helper()
+	out, err := docker(t, "exec", cp, "k0s", "kubectl", "get", "pods",
+		"-n", namespace, "--no-headers")
+	if err != nil {
+		t.Fatalf("get pods -n %s: %v\n%s", namespace, err, out)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if strings.Contains(line, substr) {
+			return
+		}
+	}
+	t.Fatalf("no pod containing %q found in namespace %q:\n%s", substr, namespace, out)
 }
 
 // runScenario creates a cluster, asserts the expected number of Ready nodes,
