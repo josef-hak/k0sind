@@ -13,7 +13,7 @@ func TestPlanSingleNode(t *testing.T) {
 		Nodes:      []v1alpha4.Node{{Role: v1alpha4.ControlPlaneRole}},
 		Networking: v1alpha4.Networking{APIServerAddress: "127.0.0.1"},
 	}
-	nodes := plan("dev", c, "img:1")
+	nodes := plan("dev", c, "img:1", "")
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
@@ -44,7 +44,7 @@ func TestPlanControlPlaneWithWorkers(t *testing.T) {
 		},
 		Networking: v1alpha4.Networking{APIServerAddress: "127.0.0.1"},
 	}
-	nodes := plan("ci", c, "img:1")
+	nodes := plan("ci", c, "img:1", "")
 	if len(nodes) != 3 {
 		t.Fatalf("expected 3 nodes, got %d", len(nodes))
 	}
@@ -104,7 +104,7 @@ func TestRunSpecExtraMountsAndPorts(t *testing.T) {
 		}},
 		Networking: v1alpha4.Networking{APIServerAddress: "127.0.0.1"},
 	}
-	spec := plan("dev", c, "img:1")[0].runSpec("")
+	spec := plan("dev", c, "img:1", "")[0].runSpec("")
 	args := strings.Join(spec.DockerArgs(), " ")
 	for _, want := range []string{"--privileged", "--network k0sind", "-v /data:/data", "-p 80:80", "img:1", "k0s controller --enable-worker --no-taints"} {
 		if !strings.Contains(args, want) {

@@ -27,15 +27,16 @@ const (
 // a kind config. Everything except the worker join token is known up front; the
 // token is injected at run time via runSpec.
 type planNode struct {
-	Name       string
-	Role       v1alpha4.NodeRole
-	Image      string
-	Privileged bool
-	Volumes    []string
-	Tmpfs      []string
-	Ports      []string
-	Labels     map[string]string
-	single     bool // true when the whole cluster is this one node
+	Name          string
+	Role          v1alpha4.NodeRole
+	Image         string
+	Privileged    bool
+	Volumes       []string
+	Tmpfs         []string
+	Ports         []string
+	Labels        map[string]string
+	single        bool   // true when the whole cluster is this one node
+	k0sConfigPath string // host path to k0s.yaml; mounted into the container when non-empty
 }
 
 // isControlPlane reports whether the node runs the k0s controller.
@@ -43,7 +44,7 @@ func (n planNode) isControlPlane() bool { return n.Role == v1alpha4.ControlPlane
 
 // plan translates a kind cluster into ordered node descriptors. The control-plane
 // node is always first so it can be started (and a join token minted) before workers.
-func plan(clusterName string, c *v1alpha4.Cluster, image string) []planNode {
+func plan(clusterName string, c *v1alpha4.Cluster, image, k0sConfigPath string) []planNode {
 	single := len(c.Nodes) == 1
 	var nodes []planNode
 	workerIdx := 0
@@ -80,6 +81,7 @@ func plan(clusterName string, c *v1alpha4.Cluster, image string) []planNode {
 			pn.Volumes = append(pn.Volumes, mountArg(m))
 		}
 		if n.Role == v1alpha4.ControlPlaneRole {
+			pn.k0sConfigPath = k0sConfigPath
 			pn.Ports = append(pn.Ports, apiServerPortArg(c.Networking))
 		}
 		for _, p := range n.ExtraPortMappings {
@@ -96,7 +98,16 @@ func plan(clusterName string, c *v1alpha4.Cluster, image string) []planNode {
 }
 
 // runSpec builds the docker.RunSpec for the node. token is only used by workers.
+// k0sConfigContainerPath is where the k0s config file is mounted inside the
+// container. We avoid /etc/k0s/ because the k0s image already has that
+// directory, causing Docker to mount a directory instead of a file.
+const k0sConfigContainerPath = "/tmp/k0s-config.yaml"
+
 func (n planNode) runSpec(token string) docker.RunSpec {
+	volumes := n.Volumes
+	if n.k0sConfigPath != "" {
+		volumes = append(volumes, n.k0sConfigPath+":"+k0sConfigContainerPath+":ro")
+	}
 	spec := docker.RunSpec{
 		Name:       n.Name,
 		Hostname:   n.Name,
@@ -104,7 +115,7 @@ func (n planNode) runSpec(token string) docker.RunSpec {
 		Privileged: n.Privileged,
 		Network:    Network,
 		Labels:     n.Labels,
-		Volumes:    n.Volumes,
+		Volumes:    volumes,
 		Tmpfs:      n.Tmpfs,
 		Ports:      n.Ports,
 		Cmd:        n.k0sCommand(token),
@@ -121,6 +132,9 @@ func (n planNode) k0sCommand(token string) []string {
 		cmd := []string{"k0s", "controller", "--enable-worker"}
 		if n.single {
 			cmd = append(cmd, "--no-taints")
+		}
+		if n.k0sConfigPath != "" {
+			cmd = append(cmd, "--config", k0sConfigContainerPath)
 		}
 		return cmd
 	}
