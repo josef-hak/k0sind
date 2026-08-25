@@ -22,11 +22,10 @@ Download the `k0sind` binary for your platform from the
 ### Linux
 
 ~~~bash
-VERSION=v1.1.0
 # For AMD64 / x86_64
-[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-linux-amd64"
+[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-linux-amd64
 # For ARM64
-[ $(uname -m) = aarch64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-linux-arm64"
+[ $(uname -m) = aarch64 ] && curl -Lo ./k0sind https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-linux-arm64
 chmod +x ./k0sind
 sudo mv ./k0sind /usr/local/bin/k0sind
 ~~~
@@ -34,20 +33,18 @@ sudo mv ./k0sind /usr/local/bin/k0sind
 ### macOS
 
 ~~~bash
-VERSION=v1.1.0
 # For Intel Macs
-[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-darwin-amd64"
+[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-darwin-amd64
 # For M1 / ARM Macs
-[ $(uname -m) = arm64 ] && curl -Lo ./k0sind "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-darwin-arm64"
+[ $(uname -m) = arm64 ] && curl -Lo ./k0sind https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-darwin-arm64
 chmod +x ./k0sind
-mv ./k0sind /some-dir-in-your-PATH/k0sind
+sudo mv ./k0sind /usr/local/bin/k0sind
 ~~~
 
 ### Windows (PowerShell)
 
 ~~~powershell
-VERSION=v1.1.0
-curl.exe -Lo k0sind-windows-amd64.exe "https://github.com/josef-hak/k0sind/releases/download/${VERSION}/k0sind-windows-amd64.exe"
+curl.exe -Lo k0sind-windows-amd64.exe https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-windows-amd64.exe
 Move-Item .\k0sind-windows-amd64.exe c:\some-dir-in-your-PATH\k0sind.exe
 ~~~
 
