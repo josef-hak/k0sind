@@ -1,3 +1,5 @@
+<p align="center"><img alt="kind" src="./logo/logo.png" width="300px" /></p>
+
 # k0sind — k0s IN Docker
 
 `k0sind` is like [kind](https://kind.sigs.k8s.io/), but each node runs
