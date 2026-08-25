@@ -92,6 +92,7 @@ k0sind create cluster -n k0s-calico --k0s-config examples/k0s-calico.yaml
 |------|---------|-------------|
 | `-n` | `k0sind` | Cluster name (also the kubeconfig context `k0sind-<name>`) |
 | `--config` | – | Path to a kind-compatible config file |
+| `--k0s-config` | – | Path to a k0s configuration file (`k0s.yaml`) |
 | `--image` | pinned k0s release | k0s node image override |
 | `--wait` | `0` | Wait for all nodes to be `Ready` (e.g. `120s`); `0` returns once started |
 
