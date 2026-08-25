@@ -63,6 +63,10 @@ jobs:
             test: TestCreateSingleNode
           - name: 1cp-2w
             test: TestCreateOneControlPlaneTwoWorkers
+          - name: k0s-calico
+            test: TestCreateWithCalico
+          - name: k0s-openebs
+            test: TestCreateWithOpenEBS
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
