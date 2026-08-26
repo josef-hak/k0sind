@@ -11,6 +11,12 @@ Because k0s ships as a single self-contained binary with a built-in CNI, k0sind
 is small: it is essentially a translator from a kind config into
 `docker run` / `k0s token create` / `k0s worker <token>` calls.
 
+## Demo
+
+Creating a 1 control-plane + 2 worker cluster, inspecting it, and tearing it down:
+
+<p align="center"><img alt="k0sind demo" src="./docs/demo.svg" width="850px" /></p>
+
 ## Requirements
 
 - Docker (daemon running, reachable via the `docker` CLI)
