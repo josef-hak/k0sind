@@ -10,14 +10,16 @@ import (
 
 const (
 	// Network is the shared docker bridge network all k0sind nodes join.
-	Network = "k0sind"
+	// This matches kind's default network name so k0sind and kind clusters
+	// can reach each other (e.g. a shared local registry).
+	Network = "kind"
 	// LabelCluster tags every container with its cluster name.
 	LabelCluster = "io.k0sind.cluster"
 	// LabelRole records the node role (control-plane / worker).
 	LabelRole = "io.k0sind.role"
 	// DefaultImage is the k0s image used when the config does not override it.
 	// Bump to the current stable k0s release when cutting a k0sind version.
-	DefaultImage = "docker.io/k0sproject/k0s:v1.36.3-k0s.1"
+	DefaultImage = "docker.io/k0sproject/k0s:v1.36.3-k0s.1-bash"
 
 	// apiContainerPort is the port the k0s API server listens on inside the container.
 	apiContainerPort = 6443

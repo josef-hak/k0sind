@@ -144,6 +144,13 @@ func (p *Provider) Create(opts CreateOptions) error {
 		}
 	}
 
+	if err := p.step("Installing default StorageClass (local-path-provisioner)", func() error {
+		_, e := p.docker.ApplyManifest(controlPlane.Name, defaultStorageManifest)
+		return e
+	}); err != nil {
+		return p.rollback(opts.Name, fmt.Errorf("install storage: %w", err))
+	}
+
 	if err := p.step(fmt.Sprintf("Exporting kubeconfig (context %q)", kubeconfig.ContextName(opts.Name)), func() error {
 		return p.exportKubeconfig(opts.Name, controlPlane.Name)
 	}); err != nil {
@@ -252,6 +259,74 @@ func (p *Provider) Delete(name string) error {
 		_ = p.docker.NetworkRemove(Network)
 	}
 	p.logf("Deleted cluster %q (%d container(s)).", name, len(ids))
+	return nil
+}
+
+// LoadOptions configures LoadImages.
+type LoadOptions struct {
+	Name   string   // cluster name
+	Images []string // local docker image references to load
+	Nodes  []string // target node container names; empty = all nodes in the cluster
+}
+
+// containerArchivePath is where the saved image tar is staged inside each node
+// before being imported into containerd, then removed.
+const containerArchivePath = "/tmp/k0sind-load-image.tar"
+
+// LoadImages saves the given images from the local docker daemon and imports
+// them directly into the containerd content store of each target node (via
+// `k0s ctr -n k8s.io images import`), so pods can reference them without a
+// registry pull. This mirrors kind's `load docker-image`.
+func (p *Provider) LoadImages(opts LoadOptions) error {
+	if len(opts.Images) == 0 {
+		return fmt.Errorf("no images specified")
+	}
+	name := opts.Name
+	if name == "" {
+		name = config.DefaultClusterName
+	}
+
+	nodes := opts.Nodes
+	if len(nodes) == 0 {
+		var err error
+		nodes, err = p.ListNodes(name)
+		if err != nil {
+			return err
+		}
+	}
+	if len(nodes) == 0 {
+		return fmt.Errorf("cluster %q has no nodes (is it running?)", name)
+	}
+
+	tmpTar, err := os.CreateTemp("", "k0sind-load-*.tar")
+	if err != nil {
+		return fmt.Errorf("create temp archive: %w", err)
+	}
+	tmpTar.Close()
+	tarPath := tmpTar.Name()
+	defer os.Remove(tarPath)
+
+	if err := p.step(fmt.Sprintf("Saving %d image(s)", len(opts.Images)), func() error {
+		return p.docker.Save(opts.Images, tarPath)
+	}); err != nil {
+		return err
+	}
+
+	for _, node := range nodes {
+		node := node
+		if err := p.step(fmt.Sprintf("Loading image(s) into %q", node), func() error {
+			if err := p.docker.CopyTo(tarPath, node, containerArchivePath); err != nil {
+				return err
+			}
+			defer func() { _, _ = p.docker.Exec(node, "rm", "-f", containerArchivePath) }()
+			_, err := p.docker.Exec(node, "k0s", "ctr", "-n", "k8s.io", "images", "import", containerArchivePath)
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+
+	p.logf("Loaded image(s) into %d node(s).", len(nodes))
 	return nil
 }
 

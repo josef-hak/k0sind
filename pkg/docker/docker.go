@@ -17,6 +17,9 @@ import (
 type Runner interface {
 	// Output runs `docker <args...>` and returns trimmed combined stdout.
 	Output(args ...string) (string, error)
+	// OutputWithStdin runs `docker <args...>` with stdin fed from the given
+	// string, and returns trimmed combined stdout.
+	OutputWithStdin(stdin string, args ...string) (string, error)
 	// Stream runs `docker <args...>` connecting stdout/stderr to the terminal.
 	Stream(args ...string) error
 }
@@ -26,6 +29,18 @@ type execRunner struct{}
 
 func (execRunner) Output(args ...string) (string, error) {
 	cmd := exec.Command("docker", args...)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("docker %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func (execRunner) OutputWithStdin(stdin string, args ...string) (string, error) {
+	cmd := exec.Command("docker", args...)
+	cmd.Stdin = strings.NewReader(stdin)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -157,6 +172,12 @@ func (c *Client) Exec(container string, cmd ...string) (string, error) {
 	return c.r.Output(append([]string{"exec", container}, cmd...)...)
 }
 
+// ApplyManifest applies a YAML manifest inside the container via `k0s kubectl
+// apply -f -`, piping the manifest over stdin.
+func (c *Client) ApplyManifest(container, manifest string) (string, error) {
+	return c.r.OutputWithStdin(manifest, "exec", "-i", container, "k0s", "kubectl", "apply", "-f", "-")
+}
+
 // Container is a single row from `docker ps`.
 type Container struct {
 	ID     string
@@ -223,6 +244,19 @@ func (c *Client) Port(container string, containerPort int) (addr, port string, e
 		return "", "", fmt.Errorf("unexpected `docker port` output: %q", out)
 	}
 	return host, p, nil
+}
+
+// Save writes the given local images to a docker-archive tar at dest, suitable
+// for import into a containerd content store (`ctr images import`).
+func (c *Client) Save(images []string, dest string) error {
+	_, err := c.r.Output(append([]string{"save", "-o", dest}, images...)...)
+	return err
+}
+
+// CopyTo copies a local file at src into container at dest.
+func (c *Client) CopyTo(src, container, dest string) error {
+	_, err := c.r.Output("cp", src, container+":"+dest)
+	return err
 }
 
 // Remove force-removes containers by ID or name (with their anonymous volumes).
