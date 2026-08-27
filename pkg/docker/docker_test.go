@@ -8,13 +8,19 @@ import (
 
 // fakeRunner records the args of the last call and returns canned output.
 type fakeRunner struct {
-	lastArgs []string
-	output   string
-	err      error
+	lastArgs  []string
+	lastStdin string
+	output    string
+	err       error
 }
 
 func (f *fakeRunner) Output(args ...string) (string, error) {
 	f.lastArgs = args
+	return f.output, f.err
+}
+func (f *fakeRunner) OutputWithStdin(stdin string, args ...string) (string, error) {
+	f.lastArgs = args
+	f.lastStdin = stdin
 	return f.output, f.err
 }
 func (f *fakeRunner) Stream(args ...string) error {
@@ -83,6 +89,45 @@ func TestPortParsing(t *testing.T) {
 	}
 	if host != "127.0.0.1" || port != "49153" {
 		t.Fatalf("got %s:%s", host, port)
+	}
+}
+
+func TestSaveArgs(t *testing.T) {
+	f := &fakeRunner{}
+	c := NewWithRunner(f)
+	if err := c.Save([]string{"img:1", "img:2"}, "/tmp/out.tar"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"save", "-o", "/tmp/out.tar", "img:1", "img:2"}
+	if !reflect.DeepEqual(f.lastArgs, want) {
+		t.Fatalf("Save args\n got: %v\nwant: %v", f.lastArgs, want)
+	}
+}
+
+func TestCopyToArgs(t *testing.T) {
+	f := &fakeRunner{}
+	c := NewWithRunner(f)
+	if err := c.CopyTo("/tmp/out.tar", "dev-control-plane", "/tmp/img.tar"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"cp", "/tmp/out.tar", "dev-control-plane:/tmp/img.tar"}
+	if !reflect.DeepEqual(f.lastArgs, want) {
+		t.Fatalf("CopyTo args\n got: %v\nwant: %v", f.lastArgs, want)
+	}
+}
+
+func TestApplyManifest(t *testing.T) {
+	f := &fakeRunner{}
+	c := NewWithRunner(f)
+	if _, err := c.ApplyManifest("dev-control-plane", "kind: Namespace\n"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"exec", "-i", "dev-control-plane", "k0s", "kubectl", "apply", "-f", "-"}
+	if !reflect.DeepEqual(f.lastArgs, want) {
+		t.Fatalf("ApplyManifest args\n got: %v\nwant: %v", f.lastArgs, want)
+	}
+	if f.lastStdin != "kind: Namespace\n" {
+		t.Fatalf("ApplyManifest stdin = %q", f.lastStdin)
 	}
 }
 
