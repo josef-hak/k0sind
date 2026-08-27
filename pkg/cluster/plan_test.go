@@ -106,7 +106,7 @@ func TestRunSpecExtraMountsAndPorts(t *testing.T) {
 	}
 	spec := plan("dev", c, "img:1", "")[0].runSpec("")
 	args := strings.Join(spec.DockerArgs(), " ")
-	for _, want := range []string{"--privileged", "--network k0sind", "-v /data:/data", "-p 80:80", "img:1", "k0s controller --enable-worker --no-taints"} {
+	for _, want := range []string{"--privileged", "--network kind", "-v /data:/data", "-p 80:80", "img:1", "k0s controller --enable-worker --no-taints"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("docker args missing %q\nfull: %s", want, args)
 		}
