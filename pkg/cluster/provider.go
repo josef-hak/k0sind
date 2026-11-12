@@ -79,7 +79,7 @@ func (p *Provider) Create(opts CreateOptions) error {
 
 	image := opts.Image
 	if image == "" {
-		image = DefaultImage
+		image = DefaultNodeImage()
 	}
 	k0sCfg := opts.K0sConfigPath
 	if k0sCfg != "" {

@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/k0sproject/k0sind/pkg/docker"
@@ -18,12 +19,39 @@ const (
 	// LabelRole records the node role (control-plane / worker).
 	LabelRole = "io.k0sind.role"
 	// DefaultImage is the k0s image used when the config does not override it.
-	// Bump to the current stable k0s release when cutting a k0sind version.
+	// Keep it a single literal: it is how Renovate finds the pinned release.
 	DefaultImage = "docker.io/k0sproject/k0s:v1.37.2-k0s.1"
+	// K0sVersionEnv selects the k0s release without naming a full image; it is
+	// the same variable the upstream k0s installer (get.k0s.sh) reads.
+	K0sVersionEnv = "K0S_VERSION"
 
 	// apiContainerPort is the port the k0s API server listens on inside the container.
 	apiContainerPort = 6443
 )
+
+// DefaultNodeImage returns the node image to use when neither --image nor the
+// kind config names one: the pinned default, or the release selected by
+// K0S_VERSION.
+func DefaultNodeImage() string {
+	v := strings.TrimSpace(os.Getenv(K0sVersionEnv))
+	if v == "" {
+		return DefaultImage
+	}
+	// DefaultImage is always "<repo>:<tag>"; swap in the requested tag.
+	repo := DefaultImage[:strings.LastIndex(DefaultImage, ":")]
+	return repo + ":" + imageTag(v)
+}
+
+// imageTag turns a k0s version into its image tag. k0s releases are written
+// v1.33.0+k0s.0, but "+" is not valid in a docker tag, so the published tags
+// use "-"; the leading "v" is optional for convenience.
+func imageTag(version string) string {
+	version = strings.ReplaceAll(version, "+", "-")
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	return version
+}
 
 // planNode is the fully-resolved description of one node container, derived from
 // a kind config. Everything except the worker join token is known up front; the

@@ -112,3 +112,19 @@ func TestRunSpecExtraMountsAndPorts(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultNodeImage(t *testing.T) {
+	cases := []struct{ env, want string }{
+		{"", DefaultImage},
+		{"v1.33.0-k0s.0", "docker.io/k0sproject/k0s:v1.33.0-k0s.0"},
+		{"v1.33.0+k0s.0", "docker.io/k0sproject/k0s:v1.33.0-k0s.0"}, // release notation
+		{"1.33.0+k0s.0", "docker.io/k0sproject/k0s:v1.33.0-k0s.0"},
+		{" v1.33.0-k0s.0 ", "docker.io/k0sproject/k0s:v1.33.0-k0s.0"},
+	}
+	for _, c := range cases {
+		t.Setenv(K0sVersionEnv, c.env)
+		if got := DefaultNodeImage(); got != c.want {
+			t.Errorf("K0S_VERSION=%q: got %q, want %q", c.env, got, c.want)
+		}
+	}
+}
