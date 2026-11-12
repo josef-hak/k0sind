@@ -25,15 +25,15 @@ Creating a 1 control-plane + 2 worker cluster, inspecting it, and tearing it dow
 ## Installing From Release Binaries
 
 Download the `k0sind` binary for your platform from the
-[releases](https://github.com/josef-hak/k0sind/releases) page.
+[releases](https://github.com/k0sind/k0sind/releases) page.
 
 ### Linux
 
 ~~~bash
 # For AMD64 / x86_64
-[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-linux-amd64
+[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind https://github.com/k0sind/k0sind/releases/latest/download/k0sind-linux-amd64
 # For ARM64
-[ $(uname -m) = aarch64 ] && curl -Lo ./k0sind https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-linux-arm64
+[ $(uname -m) = aarch64 ] && curl -Lo ./k0sind https://github.com/k0sind/k0sind/releases/latest/download/k0sind-linux-arm64
 chmod +x ./k0sind
 sudo mv ./k0sind /usr/local/bin/k0sind
 ~~~
@@ -42,9 +42,9 @@ sudo mv ./k0sind /usr/local/bin/k0sind
 
 ~~~bash
 # For Intel Macs
-[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-darwin-amd64
+[ $(uname -m) = x86_64 ] && curl -Lo ./k0sind https://github.com/k0sind/k0sind/releases/latest/download/k0sind-darwin-amd64
 # For M1 / ARM Macs
-[ $(uname -m) = arm64 ] && curl -Lo ./k0sind https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-darwin-arm64
+[ $(uname -m) = arm64 ] && curl -Lo ./k0sind https://github.com/k0sind/k0sind/releases/latest/download/k0sind-darwin-arm64
 chmod +x ./k0sind
 sudo mv ./k0sind /usr/local/bin/k0sind
 ~~~
@@ -52,7 +52,7 @@ sudo mv ./k0sind /usr/local/bin/k0sind
 ### Windows (PowerShell)
 
 ~~~powershell
-curl.exe -Lo k0sind-windows-amd64.exe https://github.com/josef-hak/k0sind/releases/latest/download/k0sind-windows-amd64.exe
+curl.exe -Lo k0sind-windows-amd64.exe https://github.com/k0sind/k0sind/releases/latest/download/k0sind-windows-amd64.exe
 Move-Item .\k0sind-windows-amd64.exe c:\some-dir-in-your-PATH\k0sind.exe
 ~~~
 
