@@ -19,7 +19,7 @@ const (
 	LabelRole = "io.k0sind.role"
 	// DefaultImage is the k0s image used when the config does not override it.
 	// Bump to the current stable k0s release when cutting a k0sind version.
-	DefaultImage = "docker.io/k0sproject/k0s:v1.36.3-k0s.1"
+	DefaultImage = "docker.io/k0sproject/k0s:v1.37.2-k0s.1"
 
 	// apiContainerPort is the port the k0s API server listens on inside the container.
 	apiContainerPort = 6443
