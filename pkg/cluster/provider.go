@@ -144,13 +144,6 @@ func (p *Provider) Create(opts CreateOptions) error {
 		}
 	}
 
-	if err := p.step("Installing default StorageClass (local-path-provisioner)", func() error {
-		_, e := p.docker.ApplyManifest(controlPlane.Name, defaultStorageManifest)
-		return e
-	}); err != nil {
-		return p.rollback(opts.Name, fmt.Errorf("install storage: %w", err))
-	}
-
 	if err := p.step(fmt.Sprintf("Exporting kubeconfig (context %q)", kubeconfig.ContextName(opts.Name)), func() error {
 		return p.exportKubeconfig(opts.Name, controlPlane.Name)
 	}); err != nil {
