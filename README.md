@@ -104,6 +104,17 @@ k0sind create cluster -n k0s-calico --k0s-config examples/k0s-calico.yaml
 | `--image` | pinned k0s release | k0s node image override |
 | `--wait` | `0` | Wait for all nodes to be `Ready` (e.g. `120s`); `0` returns once started |
 
+### Environment
+
+| Variable | Description |
+|----------|-------------|
+| `K0S_VERSION` | k0s release to run, e.g. `v1.33.0+k0s.0` (same variable as the upstream `get.k0s.sh` installer). Picks the matching `k0sproject/k0s` image; `--image` and `nodes[].image` win over it. |
+| `KUBECONFIG` | Kubeconfig file the cluster context is merged into (defaults to `~/.kube/config`) |
+
+~~~bash
+K0S_VERSION=v1.33.0+k0s.0 k0sind create cluster
+~~~
+
 ## kind compatibility
 
 k0sind is a **migration layer**, not a drop-in for every kind feature. It honors
