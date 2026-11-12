@@ -55,10 +55,11 @@ func assertPodExists(t *testing.T, cp, namespace, substr string) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if strings.Contains(line, substr) {
+			t.Logf("%s pod %q present in namespace %q", markOK, substr, namespace)
 			return
 		}
 	}
-	t.Fatalf("no pod containing %q found in namespace %q:\n%s", substr, namespace, out)
+	t.Fatalf("%s no pod containing %q found in namespace %q:\n%s", markFail, substr, namespace, out)
 }
 
 // runScenario creates a cluster, asserts the expected number of Ready nodes,
@@ -77,13 +78,14 @@ func runScenario(t *testing.T, name string, extraArgs []string, wantNodes int, w
 
 	args := append([]string{"create", "cluster", "--name", name, "--wait", wait.String()}, extraArgs...)
 	if err := run(t, bin, args...); err != nil {
-		t.Fatalf("create cluster: %v", err)
+		t.Fatalf("%s create cluster: %v", markFail, err)
 	}
+	t.Logf("%s cluster %q created", markOK, name)
 
 	// Count Ready nodes reported by k0s.
 	out, err := docker(t, "exec", cp, "k0s", "kubectl", "get", "nodes", "--no-headers")
 	if err != nil {
-		t.Fatalf("get nodes: %v", err)
+		t.Fatalf("%s get nodes: %v", markFail, err)
 	}
 	ready := 0
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
@@ -92,82 +94,63 @@ func runScenario(t *testing.T, name string, extraArgs []string, wantNodes int, w
 		}
 	}
 	if ready != wantNodes {
-		t.Fatalf("expected %d Ready nodes, got %d\n%s", wantNodes, ready, out)
+		t.Fatalf("%s expected %d Ready nodes, got %d\n%s", markFail, wantNodes, ready, out)
 	}
+	t.Logf("%s %d/%d nodes Ready", markOK, ready, wantNodes)
 
 	// A workload must be schedulable...
 	if _, err := docker(t, "exec", cp, "k0s", "kubectl", "run", "probe",
 		"--image=registry.k8s.io/pause:3.9", "--restart=Never"); err != nil {
-		t.Fatalf("run probe pod: %v", err)
+		t.Fatalf("%s run probe pod: %v", markFail, err)
 	}
 	// ...and the whole cluster (system pods across every node + our probe) must
 	// converge to Ready.
 	waitClusterPodsReady(t, cp, 120*time.Second)
 }
 
-// waitClusterPodsReady polls `kubectl get pods -A -o wide` every 2s, logging the
-// full output (so all nodes' pods are visible), until every pod is Ready or
-// Completed — or the timeout is hit.
+// tickInterval is how often to log a heartbeat while nothing moves.
+const tickInterval = 20 * time.Second
+
+// waitClusterPodsReady polls every 2s until every pod is Ready or Completed.
+// It logs the full table on the first poll and at the end; in between only the
+// pods that moved, plus a heartbeat when nothing does. A cluster coming up then
+// tells its own story instead of scrolling the same dozen settled pods by.
 func waitClusterPodsReady(t *testing.T, cp string, timeout time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
+	start := time.Now()
+	deadline := start.Add(timeout)
+	var prev []pod
+	lastTick := start
+
 	for {
-		out, _ := docker(t, "exec", cp, "k0s", "kubectl", "get", "pods", "-A", "-o", "wide")
-		t.Logf("waiting for all cluster pods to be Ready:\n%s", trimWideColumns(out))
-		if allPodsReady(out) {
-			t.Logf("all cluster pods are Ready")
+		pods, ready, done, err := clusterPods(t, cp)
+		if err != nil {
+			t.Fatalf("%s %v", markFail, err)
+		}
+		switch {
+		case len(pods) > 0 && ready+done == len(pods):
+			t.Logf("%s all %d pods ready in %s\n%s", markOK, len(pods),
+				time.Since(start).Round(time.Second), podTable(pods))
 			return
+		case prev == nil:
+			t.Logf("%s waiting for pods to be Ready — %d/%d ready\n%s",
+				markWait, ready, len(pods), podTable(pods))
+			prev, lastTick = pods, time.Now()
+		default:
+			if changed := podChanges(pods, prev); len(changed) > 0 {
+				t.Logf("%s %d/%d ready (%s)\n%s", markWait, ready, len(pods),
+					time.Since(start).Round(time.Second), podTable(changed))
+				prev, lastTick = pods, time.Now()
+			} else if time.Since(lastTick) >= tickInterval {
+				t.Logf("%s unchanged — %d/%d ready (%s)", markWait, ready, len(pods),
+					time.Since(start).Round(time.Second))
+				lastTick = time.Now()
+			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("cluster pods did not all become Ready within %s", timeout)
+			t.Fatalf("%s cluster pods did not all become Ready within %s\n%s",
+				markFail, timeout, podTable(pods))
 		}
 		time.Sleep(2 * time.Second)
 	}
-}
-
-// trimWideColumns drops the trailing "NOMINATED NODE" and "READINESS GATES"
-// columns from `kubectl get pods -o wide` output (almost always <none>) while
-// keeping NODE. It truncates each line at the header offset of the first dropped
-// column, which is robust to variable-width fields such as RESTARTS "0 (5m ago)".
-func trimWideColumns(out string) string {
-	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	cut := strings.Index(lines[0], "NOMINATED NODE")
-	if cut < 0 {
-		return strings.Join(lines, "\n")
-	}
-	for i, line := range lines {
-		if len(line) > cut {
-			lines[i] = strings.TrimRight(line[:cut], " ")
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
-// allPodsReady parses `kubectl get pods -A` output (NAMESPACE NAME READY STATUS
-// ...) and reports whether every listed pod is Running with all containers ready
-// (READY N/N, N>0) or has Completed. Returns false for header-only/empty output.
-func allPodsReady(out string) bool {
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) <= 1 {
-		return false // header only or nothing scheduled yet
-	}
-	for _, line := range lines[1:] { // skip the header row
-		f := strings.Fields(line)
-		if len(f) < 4 {
-			continue
-		}
-		ready, status := f[2], f[3]
-		switch status {
-		case "Completed", "Succeeded":
-			continue
-		case "Running":
-			n, d, ok := strings.Cut(ready, "/")
-			if !ok || n != d || n == "0" {
-				return false
-			}
-		default:
-			return false
-		}
-	}
-	return true
 }
