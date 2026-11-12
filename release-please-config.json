@@ -5,8 +5,6 @@
       "release-type": "go",
       "package-name": "k0sind",
       "include-component-in-tag": false,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
       "extra-files": ["internal/version/version.go"],
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
