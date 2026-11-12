@@ -151,11 +151,11 @@ The bump comes from the commit subject, so PRs must be squash-merged with a
 
 | Commit prefix | Effect |
 |---------------|--------|
-| `feat:` | minor (`0.1.0` -> `0.2.0`) |
-| `fix:`, `perf:`, `refactor:` | patch (`0.1.0` -> `0.1.1`) |
+| `feat:` | minor (`1.2.0` -> `1.3.0`) |
+| `fix:`, `perf:`, `refactor:` | patch (`1.2.0` -> `1.2.1`) |
 | `fix(deps):` | patch — what Dependabot (Go modules) and Renovate (k0s image) use |
 | `docs:`, `test:`, `ci:`, `chore:` | no release |
-| `feat!:` / `BREAKING CHANGE:` | minor while pre-1.0, major after |
+| `feat!:` / `BREAKING CHANGE:` | major (`1.2.0` -> `2.0.0`) |
 
 ~~~bash
 # test the full release build locally (no publishing) -> ./dist
