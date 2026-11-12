@@ -3,4 +3,5 @@ package version
 
 // Version is the current k0sind release. It defaults to the in-development
 // version and is overridden at build time via -ldflags by GoReleaser / Makefile.
-var Version = "0.1.0"
+// The literal is kept in sync by release-please; do not edit it by hand.
+var Version = "0.0.0" // x-release-please-version
