@@ -51,5 +51,8 @@ changelog:
 
 release:
   prerelease: auto
+  # release-please creates the GitHub release with the CHANGELOG notes; this
+  # run only uploads binaries to it and must not rewrite the body.
+  mode: keep-existing
   # First stable line is 0.x; mark <1.0.0 releases clearly.
   name_template: "k0sind {{ .Tag }}"

@@ -140,18 +140,30 @@ CI (`.github/workflows/ci.yml`) runs three jobs: `lint-build` (gofmt/vet/build),
 
 ## Releasing
 
-Releases are automated with [GoReleaser](https://goreleaser.com).
+Releases are cut by [release-please](https://github.com/googleapis/release-please)
+and built by [GoReleaser](https://goreleaser.com). Nothing is tagged by hand:
+every merge to `main` updates a standing **Release PR** that accumulates
+`CHANGELOG.md` and the next version. Merging that PR tags the release and
+publishes the binaries.
+
+The bump comes from the commit subject, so PRs must be squash-merged with a
+[conventional commit](https://www.conventionalcommits.org) title:
+
+| Commit prefix | Effect |
+|---------------|--------|
+| `feat:` | minor (`0.1.0` -> `0.2.0`) |
+| `fix:`, `perf:`, `refactor:` | patch (`0.1.0` -> `0.1.1`) |
+| `fix(deps):` | patch — what Dependabot uses for Go modules |
+| `docs:`, `test:`, `ci:`, `chore:` | no release |
+| `feat!:` / `BREAKING CHANGE:` | minor while pre-1.0, major after |
 
 ~~~bash
 # test the full release build locally (no publishing) -> ./dist
 make snapshot
-
-# cut a real release: tag and push
-git tag v0.1.0
-git push origin v0.1.0
 ~~~
 
-Pushing a `v*` tag triggers `.github/workflows/release.yml`, which vets, tests,
+Pushing a `v*` tag by hand still works and triggers the same
+`.github/workflows/release.yml`, which vets, tests,
 then builds the raw `k0sind-<os>-<arch>` binaries (Linux/macOS amd64+arm64,
 Windows amd64) plus `checksums.txt` and attaches them to a GitHub Release. The
 version is stamped into the binary via `-ldflags`, so `k0sind version` reports

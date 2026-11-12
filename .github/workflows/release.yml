@@ -1,9 +1,17 @@
 name: Release
 
 on:
+  # Manually pushed tags still release.
   push:
     tags:
       - "v*"
+  # Called by release-please.yml once it has tagged the release.
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag to build; defaults to the tag that triggered the push.
+        type: string
+        required: false
 
 permissions:
   contents: write
@@ -14,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0 # full history + tags for the changelog
       - uses: actions/setup-go@v7
         with:

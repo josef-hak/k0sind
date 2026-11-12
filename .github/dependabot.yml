@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # Module bumps ship in the binary, so they are released: "fix" cuts a patch.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "fix(deps)"
+
+  # Action bumps only affect CI, so "chore" keeps them out of the release.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
