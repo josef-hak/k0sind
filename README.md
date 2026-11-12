@@ -153,7 +153,7 @@ The bump comes from the commit subject, so PRs must be squash-merged with a
 |---------------|--------|
 | `feat:` | minor (`0.1.0` -> `0.2.0`) |
 | `fix:`, `perf:`, `refactor:` | patch (`0.1.0` -> `0.1.1`) |
-| `fix(deps):` | patch — what Dependabot uses for Go modules |
+| `fix(deps):` | patch — what Dependabot (Go modules) and Renovate (k0s image) use |
 | `docs:`, `test:`, `ci:`, `chore:` | no release |
 | `feat!:` / `BREAKING CHANGE:` | minor while pre-1.0, major after |
 

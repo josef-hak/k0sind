@@ -1,0 +1,22 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "description": "Keeps the pinned k0s node image current. Go modules and action versions stay with Dependabot, so only the custom manager is enabled here.",
+  "enabledManagers": ["custom.regex"],
+  "schedule": ["before 6am on monday"],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "fix",
+  "semanticCommitScope": "deps",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "k0s node image pinned in DefaultImage",
+      "managerFilePatterns": ["pkg/cluster/plan.go"],
+      "matchStrings": [
+        "DefaultImage = \"(?<depName>docker\\.io/k0sproject/k0s):(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-k0s\\.(?<build>\\d+)$"
+    }
+  ]
+}
