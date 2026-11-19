@@ -59,6 +59,31 @@ func TestCreateWithOpenEBS(t *testing.T) {
 	assertPodExists(t, "ci-openebs-control-plane", "openebs", "openebs")
 }
 
+func TestKubeletConfigPatch(t *testing.T) {
+	t.Parallel()
+	runScenario(t, "ci-kubelet", []string{"--config", "../../examples/kubelet-config.yaml"}, 1, 120*time.Second)
+	assertKubeletEviction(t, "ci-kubelet-control-plane")
+}
+
+// assertKubeletEviction reads the kubelet's live configuration and checks the
+// eviction thresholds from the kind config's KubeletConfiguration patch landed.
+// configz is the kubelet's own view, so this proves the whole path: kind patch
+// -> k0s worker profile -> running kubelet.
+func assertKubeletEviction(t *testing.T, cp string) {
+	t.Helper()
+	out, err := docker(t, "exec", cp, "k0s", "kubectl", "get", "--raw",
+		"/api/v1/nodes/"+cp+"/proxy/configz")
+	if err != nil {
+		t.Fatalf("%s read kubelet configz: %v\n%s", markFail, err, out)
+	}
+	for _, want := range []string{`"imagefs.available":"1Gi"`, `"nodefs.available":"1Gi"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("%s kubelet config is missing %s:\n%s", markFail, want, out)
+		}
+	}
+	t.Logf("%s kubelet of %s uses the patched eviction thresholds", markOK, cp)
+}
+
 func TestMountPropagation(t *testing.T) {
 	t.Parallel()
 	runScenario(t, "ci-mount", nil, 1, 120*time.Second)

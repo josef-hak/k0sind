@@ -86,8 +86,10 @@ func unsupportedWarnings(c *v1alpha4.Cluster) []string {
 	add := func(field string) {
 		w = append(w, fmt.Sprintf("%q is a kind/kubeadm-specific field with no k0s equivalent; ignored", field))
 	}
-	if len(c.KubeadmConfigPatches) > 0 || len(c.KubeadmConfigPatchesJSON6902) > 0 {
-		add("kubeadmConfigPatches")
+	// KubeletConfiguration patches are applied as a k0s worker profile; the
+	// other kubeadm kinds have no counterpart.
+	if len(KubeletPatches(c)) < len(c.KubeadmConfigPatches) || len(c.KubeadmConfigPatchesJSON6902) > 0 {
+		add("kubeadmConfigPatches (except KubeletConfiguration)")
 	}
 	if len(c.ContainerdConfigPatches) > 0 || len(c.ContainerdConfigPatchesJSON6902) > 0 {
 		add("containerdConfigPatches")

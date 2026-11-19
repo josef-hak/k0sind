@@ -1,0 +1,19 @@
+# Kubelet settings travel as a kind kubeadmConfigPatch. k0sind applies the
+# KubeletConfiguration ones as the k0s "default" worker profile, which every
+# node picks up.
+#
+# The eviction thresholds below are the common case: kubelet's defaults are a
+# percentage of the *host* filesystem, so on a full-ish disk a throwaway cluster
+# comes up Ready and then taints itself disk-pressure, leaving every pod Pending.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+kubeadmConfigPatches:
+  - |
+    kind: KubeletConfiguration
+    apiVersion: kubelet.config.k8s.io/v1beta1
+    evictionHard:
+      imagefs.available: "1Gi"
+      nodefs.available: "1Gi"
+      memory.available: "100Mi"
