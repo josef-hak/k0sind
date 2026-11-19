@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.0](https://github.com/k0sind/k0sind/compare/v1.3.0...v1.4.0) (2026-11-19)
+
+
+### Features
+
+* add --kubeconfig to create, delete and export ([1574188](https://github.com/k0sind/k0sind/commit/157418838576fab75c230c79893d4d6342237cdf))
+* apply KubeletConfiguration patches as the default worker profile ([a880f52](https://github.com/k0sind/k0sind/commit/a880f52cb9acdd53196baf13eb0c26f7b3407c73))
+* honour KIND_EXPERIMENTAL_DOCKER_NETWORK ([1bd3271](https://github.com/k0sind/k0sind/commit/1bd32710a6f5acff35b9d8c887a5955784734cbe))
+* keep the kubelet root at /var/lib/kubelet ([f652fbf](https://github.com/k0sind/k0sind/commit/f652fbfbb41ff25a15e9a56e7c2421450ffd85fe))
+* make node mounts rshared so propagation workloads start ([d4e8170](https://github.com/k0sind/k0sind/commit/d4e81706187eb0efc8ddffe4b6d9a371300f1360))
+
 ## [1.3.0](https://github.com/k0sind/k0sind/compare/v1.2.0...v1.3.0) (2026-11-12)
 
 
