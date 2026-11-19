@@ -44,6 +44,90 @@ func TestCreateWithOpenEBS(t *testing.T) {
 	assertPodExists(t, "ci-openebs-control-plane", "openebs", "openebs")
 }
 
+func TestMountPropagation(t *testing.T) {
+	t.Parallel()
+	runScenario(t, "ci-mount", nil, 1, 120*time.Second)
+	cp := "ci-mount-control-plane"
+	assertRootMountShared(t, cp)
+	assertPropagationWorkloadRuns(t, cp)
+}
+
+// assertRootMountShared checks the node's root mount is shared. The kubelet
+// refuses pods that hostPath-mount with propagation unless it is.
+func assertRootMountShared(t *testing.T, cp string) {
+	t.Helper()
+	out, err := docker(t, "exec", cp, "sh", "-c", "grep -m1 ' / / ' /proc/self/mountinfo")
+	if err != nil {
+		t.Fatalf("%s read mountinfo: %v\n%s", markFail, err, out)
+	}
+	// The optional fields of a mountinfo line carry "shared:N" for a shared mount.
+	if !strings.Contains(out, "shared:") {
+		t.Fatalf("%s root mount of %s is not shared:\n%s", markFail, cp, out)
+	}
+	t.Logf("%s root mount of %s is shared", markOK, cp)
+}
+
+// propagationProbe hostPath-mounts with HostToContainer propagation, the shape
+// CNI agents and node agents use (istio-cni, velero, node-exporter). Without a
+// shared root mount the kubelet fails it with "path ... is mounted on ... but
+// it is not a shared or slave mount" and the pod never starts.
+const propagationProbe = `
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: propagation-probe
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: propagation-probe
+  template:
+    metadata:
+      labels:
+        app: propagation-probe
+    spec:
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: probe
+          image: registry.k8s.io/pause:3.9
+          volumeMounts:
+            - name: netns
+              mountPath: /host/netns
+              mountPropagation: HostToContainer
+      volumes:
+        - name: netns
+          hostPath:
+            path: /var/run/netns
+            type: DirectoryOrCreate
+`
+
+func assertPropagationWorkloadRuns(t *testing.T, cp string) {
+	t.Helper()
+	out, err := dockerStdin(t, propagationProbe, "exec", "-i", cp,
+		"k0s", "kubectl", "apply", "-f", "-")
+	if err != nil {
+		t.Fatalf("%s apply propagation probe: %v\n%s", markFail, err, out)
+	}
+	deadline := time.Now().Add(120 * time.Second)
+	for {
+		out, err := docker(t, "exec", cp, "k0s", "kubectl", "get", "pods",
+			"-l", "app=propagation-probe", "--no-headers")
+		switch {
+		case err != nil:
+			t.Fatalf("%s get probe pods: %v\n%s", markFail, err, out)
+		case strings.Contains(out, "Running"):
+			t.Logf("%s propagation probe running: %s", markOK, strings.TrimSpace(out))
+			return
+		case strings.Contains(out, "CreateContainerError"):
+			t.Fatalf("%s propagation probe rejected by the kubelet:\n%s", markFail, out)
+		case time.Now().After(deadline):
+			t.Fatalf("%s propagation probe did not start in time:\n%s", markFail, out)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
 // assertPodExists checks that at least one pod whose name contains substr
 // exists in the given namespace.
 func assertPodExists(t *testing.T, cp, namespace, substr string) {
