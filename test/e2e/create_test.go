@@ -59,6 +59,43 @@ func TestCreateWithOpenEBS(t *testing.T) {
 	assertPodExists(t, "ci-openebs-control-plane", "openebs", "openebs")
 }
 
+// TestNetworkOverride is not parallel: it drives k0sind through the process
+// environment and checks a bridge it creates itself.
+func TestNetworkOverride(t *testing.T) {
+	bin := k0sindBin(t)
+	const name = "ci-net"
+	const network = "k0sind-e2e-net"
+	env := []string{"KIND_EXPERIMENTAL_DOCKER_NETWORK=" + network}
+
+	t.Cleanup(func() {
+		_ = runEnv(t, bin, env, "delete", "cluster", "--name", name)
+		// A network named by the caller is theirs: k0sind must leave it.
+		if out, err := docker(t, "network", "inspect", network, "--format", "{{.Name}}"); err != nil {
+			t.Errorf("%s k0sind removed the caller's network %q: %v\n%s", markFail, network, err, out)
+		}
+		_, _ = docker(t, "network", "rm", network)
+	})
+
+	if out, err := docker(t, "network", "create", network); err != nil {
+		t.Fatalf("%s create network: %v\n%s", markFail, err, out)
+	}
+	if err := runEnv(t, bin, env, "create", "cluster", "--name", name, "--wait", "120s"); err != nil {
+		t.Fatalf("%s create cluster: %v", markFail, err)
+	}
+
+	out, err := docker(t, "inspect", name+"-control-plane", "--format", "{{json .NetworkSettings.Networks}}")
+	if err != nil {
+		t.Fatalf("%s inspect node: %v\n%s", markFail, err, out)
+	}
+	if !strings.Contains(out, network) {
+		t.Fatalf("%s node is not on %q:\n%s", markFail, network, out)
+	}
+	if strings.Contains(out, `"kind"`) {
+		t.Fatalf("%s node is still on the default bridge:\n%s", markFail, out)
+	}
+	t.Logf("%s node of %q is on the overridden bridge %q", markOK, name, network)
+}
+
 func TestKubeletConfigPatch(t *testing.T) {
 	t.Parallel()
 	runScenario(t, "ci-kubelet", []string{"--config", "../../examples/kubelet-config.yaml"}, 1, 120*time.Second)

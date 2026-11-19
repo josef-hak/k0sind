@@ -10,10 +10,13 @@ import (
 )
 
 const (
-	// Network is the shared docker bridge network all k0sind nodes join.
+	// Network is the default shared docker bridge all k0sind nodes join.
 	// This matches kind's default network name so k0sind and kind clusters
 	// can reach each other (e.g. a shared local registry).
 	Network = "kind"
+	// NetworkEnv overrides the bridge. Same variable kind reads, so scripts
+	// that already set it keep working.
+	NetworkEnv = "KIND_EXPERIMENTAL_DOCKER_NETWORK"
 	// LabelCluster tags every container with its cluster name.
 	LabelCluster = "io.k0sind.cluster"
 	// LabelRole records the node role (control-plane / worker).
@@ -36,6 +39,21 @@ const (
 	// has it - kind included - means those charts work unmodified.
 	KubeletRootDir = "/var/lib/kubelet"
 )
+
+// NetworkName returns the bridge every node joins: the default, or the value of
+// KIND_EXPERIMENTAL_DOCKER_NETWORK when set.
+func NetworkName() string {
+	if v := strings.TrimSpace(os.Getenv(NetworkEnv)); v != "" {
+		return v
+	}
+	return Network
+}
+
+// NetworkOverridden reports whether the bridge comes from the environment. Such
+// a network belongs to the caller, so k0sind does not remove it.
+func NetworkOverridden() bool {
+	return strings.TrimSpace(os.Getenv(NetworkEnv)) != ""
+}
 
 // DefaultNodeImage returns the node image to use when neither --image nor the
 // kind config names one: the pinned default, or the release selected by
@@ -151,7 +169,7 @@ func (n planNode) runSpec(token string) docker.RunSpec {
 		Hostname:   n.Name,
 		Image:      n.Image,
 		Privileged: n.Privileged,
-		Network:    Network,
+		Network:    NetworkName(),
 		Labels:     n.Labels,
 		Volumes:    volumes,
 		Tmpfs:      n.Tmpfs,

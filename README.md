@@ -110,6 +110,7 @@ k0sind create cluster -n k0s-calico --k0s-config examples/k0s-calico.yaml
 |----------|-------------|
 | `K0S_VERSION` | k0s release to run, e.g. `v1.33.0+k0s.0` (same variable as the upstream `get.k0s.sh` installer). Picks the matching `k0sproject/k0s` image; `--image` and `nodes[].image` win over it. |
 | `KUBECONFIG` | Kubeconfig file the cluster context is merged into (defaults to `~/.kube/config`) |
+| `KIND_EXPERIMENTAL_DOCKER_NETWORK` | Docker bridge the nodes join (defaults to `kind`). Same variable kind reads. A network named here belongs to the caller, so `delete cluster` leaves it in place. |
 
 ~~~bash
 K0S_VERSION=v1.33.0+k0s.0 k0sind create cluster
@@ -138,6 +139,9 @@ merged key by key at the top level, where kind would apply a strategic merge.
 
 ## Topology
 
+- **One shared bridge.** Every cluster joins the same docker network (`kind` by
+  default, see `KIND_EXPERIMENTAL_DOCKER_NETWORK`), so clusters can reach each
+  other's API servers and a local registry container can serve them all.
 - **1 control-plane + N workers.** The control-plane runs
   `k0s controller --enable-worker`; workers join with a token
   (`k0s token create --role=worker`).
