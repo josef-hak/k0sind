@@ -114,8 +114,12 @@ func (p *Provider) Create(opts CreateOptions) error {
 		return err
 	}
 
-	if err := p.step(fmt.Sprintf("Ensuring cluster network %q", Network), func() error {
-		return p.docker.NetworkEnsure(Network)
+	network := NetworkName()
+	if NetworkOverridden() {
+		p.logf("WARNING: Overriding docker network due to %s", NetworkEnv)
+	}
+	if err := p.step(fmt.Sprintf("Ensuring cluster network %q", network), func() error {
+		return p.docker.NetworkEnsure(network)
 	}); err != nil {
 		return err
 	}
@@ -313,9 +317,12 @@ func (p *Provider) Delete(name string) error {
 		return nil
 	}
 
-	// Drop the shared network when no k0sind clusters remain.
-	if remaining, err := p.docker.PS(LabelCluster); err == nil && len(remaining) == 0 {
-		_ = p.docker.NetworkRemove(Network)
+	// Drop the shared network when no k0sind clusters remain. A network named
+	// by the caller is theirs to manage, so leave it alone.
+	if !NetworkOverridden() {
+		if remaining, err := p.docker.PS(LabelCluster); err == nil && len(remaining) == 0 {
+			_ = p.docker.NetworkRemove(Network)
+		}
 	}
 	p.logf("Deleted cluster %q (%d container(s)).", name, len(ids))
 	return nil

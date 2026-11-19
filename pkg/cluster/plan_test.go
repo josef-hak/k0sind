@@ -162,3 +162,40 @@ func TestKubeletRootDirIsUpstreamDefault(t *testing.T) {
 		}
 	}
 }
+
+// kind lets the bridge be overridden with KIND_EXPERIMENTAL_DOCKER_NETWORK;
+// k0sind reads the same variable so existing scripts port over unchanged.
+func TestNetworkNameHonoursKindEnv(t *testing.T) {
+	if got := NetworkName(); got != Network {
+		t.Fatalf("NetworkName() = %q, want the default %q", got, Network)
+	}
+	if NetworkOverridden() {
+		t.Fatal("NetworkOverridden() is true without the variable set")
+	}
+
+	t.Setenv(NetworkEnv, "  custom-net  ")
+	if got := NetworkName(); got != "custom-net" {
+		t.Fatalf("NetworkName() = %q, want the override", got)
+	}
+	if !NetworkOverridden() {
+		t.Fatal("NetworkOverridden() is false with the variable set")
+	}
+
+	// An empty value is not an override.
+	t.Setenv(NetworkEnv, "")
+	if got := NetworkName(); got != Network {
+		t.Fatalf("NetworkName() = %q, want the default for an empty value", got)
+	}
+}
+
+func TestRunSpecUsesOverriddenNetwork(t *testing.T) {
+	t.Setenv(NetworkEnv, "custom-net")
+	c := &v1alpha4.Cluster{
+		Nodes:      []v1alpha4.Node{{Role: v1alpha4.ControlPlaneRole}},
+		Networking: v1alpha4.Networking{APIServerAddress: "127.0.0.1"},
+	}
+	args := strings.Join(plan("dev", c, "img:1", "")[0].runSpec("").DockerArgs(), " ")
+	if !strings.Contains(args, "--network custom-net") {
+		t.Fatalf("docker args do not use the overridden network: %s", args)
+	}
+}

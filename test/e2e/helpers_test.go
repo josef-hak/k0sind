@@ -38,6 +38,18 @@ func run(t *testing.T, bin string, args ...string) error {
 	return err
 }
 
+// runEnv is run() with extra environment variables, for the settings k0sind
+// reads from the environment rather than from flags.
+func runEnv(t *testing.T, bin string, env []string, args ...string) error {
+	t.Helper()
+	t.Logf("$ %v %s %v", env, bin, args)
+	cmd := exec.Command(bin, args...)
+	cmd.Env = append(os.Environ(), env...)
+	out, err := cmd.CombinedOutput()
+	t.Logf("%s", out)
+	return err
+}
+
 // docker runs a docker command and returns its combined output.
 func docker(t *testing.T, args ...string) (string, error) {
 	t.Helper()
