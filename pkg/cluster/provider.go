@@ -28,6 +28,12 @@ func NewProvider() *Provider {
 	return &Provider{docker: docker.New(), out: out, status: status.New(out)}
 }
 
+// newProviderWithDocker returns a Provider on a caller-supplied docker client,
+// for tests that drive it with a fake Runner.
+func newProviderWithDocker(c *docker.Client, out io.Writer) *Provider {
+	return &Provider{docker: c, out: out, status: status.New(out)}
+}
+
 // step runs a named phase with spinner/✓ progress, marking it ✗ on error.
 func (p *Provider) step(msg string, fn func() error) error {
 	p.status.Start(msg)
@@ -109,8 +115,10 @@ func (p *Provider) Create(opts CreateOptions) error {
 	}
 
 	if err := p.step(fmt.Sprintf("Starting control-plane node %q", controlPlane.Name), func() error {
-		_, e := p.docker.Run(controlPlane.runSpec(""))
-		return e
+		if _, e := p.docker.Run(controlPlane.runSpec("")); e != nil {
+			return e
+		}
+		return p.prepareNode(controlPlane.Name)
 	}); err != nil {
 		return p.rollback(opts.Name, err)
 	}
@@ -129,8 +137,10 @@ func (p *Provider) Create(opts CreateOptions) error {
 			if e != nil {
 				return fmt.Errorf("create worker token: %w", e)
 			}
-			_, e = p.docker.Run(n.runSpec(token))
-			return e
+			if _, e = p.docker.Run(n.runSpec(token)); e != nil {
+				return e
+			}
+			return p.prepareNode(n.Name)
 		}); err != nil {
 			return p.rollback(opts.Name, err)
 		}
@@ -154,6 +164,22 @@ func (p *Provider) Create(opts CreateOptions) error {
 	p.logf("\nCluster %q is ready.", opts.Name)
 	p.logf("Set kubectl context with:\n  kubectl config use-context %s", ctx)
 	p.logf("Then try:\n  kubectl --context %s get nodes", ctx)
+	return nil
+}
+
+// prepareNode makes the node's root mount shared, right after the container
+// starts and before the kubelet sets up any pod. The k0s image leaves the node's
+// mounts private, which makes the kubelet refuse every pod that hostPath-mounts
+// with mount propagation:
+//
+//	path "/var/run/netns" is mounted on "/run" but it is not a shared or slave mount
+//
+// CNI agents, storage drivers and node agents (istio-cni, velero, node-exporter)
+// all need it. kind does the same in its node entrypoint.
+func (p *Provider) prepareNode(node string) error {
+	if _, err := p.docker.Exec(node, "mount", "--make-rshared", "/"); err != nil {
+		return fmt.Errorf("make %s mounts rshared: %w", node, err)
+	}
 	return nil
 }
 

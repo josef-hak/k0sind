@@ -45,6 +45,15 @@ func docker(t *testing.T, args ...string) (string, error) {
 	return string(out), err
 }
 
+// dockerStdin is docker() with something piped in, for `kubectl apply -f -`.
+func dockerStdin(t *testing.T, stdin string, args ...string) (string, error) {
+	t.Helper()
+	cmd := exec.Command("docker", args...)
+	cmd.Stdin = strings.NewReader(stdin)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
 // pod is one row of the cluster's pod summary.
 type pod struct {
 	name  string // namespace/name
