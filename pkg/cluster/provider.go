@@ -93,6 +93,12 @@ func (p *Provider) Create(opts CreateOptions) error {
 			k0sCfg = abs
 		}
 	}
+	if patches := config.KubeletPatches(cfg); len(patches) > 0 {
+		k0sCfg, err = p.writeKubeletProfile(opts.Name, k0sCfg, patches)
+		if err != nil {
+			return err
+		}
+	}
 	nodes := plan(opts.Name, cfg, image, k0sCfg)
 	controlPlane := nodes[0] // plan guarantees control-plane is first
 	workers := nodes[1:]
@@ -165,6 +171,38 @@ func (p *Provider) Create(opts CreateOptions) error {
 	p.logf("Set kubectl context with:\n  kubectl config use-context %s", ctx)
 	p.logf("Then try:\n  kubectl --context %s get nodes", ctx)
 	return nil
+}
+
+// k0sConfigFile is where a generated k0s config for a cluster lives. It is
+// bind-mounted into the control-plane, so it has to outlive Create: docker
+// re-resolves a bind path when the container restarts, and would silently
+// create a directory there if the file were gone.
+func k0sConfigFile(cluster string) string {
+	return filepath.Join(os.TempDir(), "k0sind-"+cluster+"-k0s.yaml")
+}
+
+// writeKubeletProfile folds KubeletConfiguration patches from the kind config
+// into the k0s config as the "default" worker profile, which every node picks
+// up, and returns the path to the result. base is the user's --k0s-config, if
+// any; its other settings are preserved.
+func (p *Provider) writeKubeletProfile(cluster, base string, patches []string) (string, error) {
+	var raw []byte
+	if base != "" {
+		var err error
+		if raw, err = os.ReadFile(base); err != nil {
+			return "", fmt.Errorf("read k0s config %q: %w", base, err)
+		}
+	}
+	merged, err := config.K0sConfigWithKubelet(raw, patches)
+	if err != nil {
+		return "", err
+	}
+	path := k0sConfigFile(cluster)
+	if err := os.WriteFile(path, merged, 0o644); err != nil {
+		return "", fmt.Errorf("write generated k0s config: %w", err)
+	}
+	p.logf("Applied %d kubeadmConfigPatch(es) as the %q worker profile", len(patches), "default")
+	return path, nil
 }
 
 // prepareNode makes the node's root mount shared, right after the container
@@ -267,6 +305,8 @@ func (p *Provider) Delete(name string) error {
 	if err := kubeconfig.Remove(name); err != nil {
 		p.logf("WARNING: could not update kubeconfig: %v", err)
 	}
+	// Nothing references a generated k0s config once the nodes are gone.
+	_ = os.Remove(k0sConfigFile(name))
 
 	if len(ids) == 0 {
 		p.logf("No cluster named %q found.", name)

@@ -122,13 +122,19 @@ the parts of the kind schema that map to k0s and warns about the rest.
 
 | Supported | Ignored (with a warning) |
 |-----------|--------------------------|
-| `name`, `nodes[].role`, `nodes[].image` | `kubeadmConfigPatches*` |
+| `name`, `nodes[].role`, `nodes[].image` | `kubeadmConfigPatches` for other kinds, `kubeadmConfigPatchesJSON6902` |
 | `nodes[].extraPortMappings` | `containerdConfigPatches*` |
 | `nodes[].extraMounts` | `networking.disableDefaultCNI`, `kubeProxyMode` |
 | `networking.apiServerAddress`, `apiServerPort` | `podSubnet`, `serviceSubnet`, `featureGates`, `runtimeConfig` |
+| `kubeadmConfigPatches` of kind `KubeletConfiguration` | |
 
 These are ignored because k0s does not use kubeadm and manages CNI/networking
 through its own `k0s.yaml`. Mapping them onto k0s config is future work.
+
+A `KubeletConfiguration` patch is the exception: k0s has a direct counterpart in
+`spec.workerProfiles`, so k0sind lifts the patch into the `default` profile,
+which every node picks up. See `examples/kubelet-config.yaml`. Patches are
+merged key by key at the top level, where kind would apply a strategic merge.
 
 ## Topology
 
