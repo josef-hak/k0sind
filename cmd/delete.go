@@ -15,15 +15,16 @@ func newDeleteCmd() *cobra.Command {
 }
 
 func newDeleteClusterCmd() *cobra.Command {
-	var name string
+	var name, kubeconfigPath string
 	cmd := &cobra.Command{
 		Use:   "cluster",
 		Short: "Delete a k0s cluster and its kubeconfig context",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cluster.NewProvider().Delete(name)
+			return cluster.NewProvider().Delete(name, kubeconfigPath)
 		},
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "cluster name (default \"k0sind\")")
+	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig", "", "sets kubeconfig path instead of $KUBECONFIG or $HOME/.kube/config")
 	return cmd
 }

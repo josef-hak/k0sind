@@ -1,6 +1,7 @@
 package kubeconfig
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestMergeAndRemove(t *testing.T) {
 	kubeconfigPath := filepath.Join(dir, "config")
 	t.Setenv("KUBECONFIG", kubeconfigPath)
 
-	if err := Merge("dev", []byte(adminKubeconfig), "127.0.0.1", "49153"); err != nil {
+	if err := Merge("dev", []byte(adminKubeconfig), "127.0.0.1", "49153", ""); err != nil {
 		t.Fatalf("merge: %v", err)
 	}
 
@@ -56,7 +57,7 @@ func TestMergeAndRemove(t *testing.T) {
 	}
 
 	// Merging a second cluster must preserve the first.
-	if err := Merge("prod", []byte(adminKubeconfig), "127.0.0.1", "50000"); err != nil {
+	if err := Merge("prod", []byte(adminKubeconfig), "127.0.0.1", "50000", ""); err != nil {
 		t.Fatalf("merge second: %v", err)
 	}
 	cfg, _ = clientcmd.LoadFromFile(kubeconfigPath)
@@ -65,7 +66,7 @@ func TestMergeAndRemove(t *testing.T) {
 	}
 
 	// Remove drops only the named cluster.
-	if err := Remove("dev"); err != nil {
+	if err := Remove("dev", ""); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
 	cfg, _ = clientcmd.LoadFromFile(kubeconfigPath)
@@ -128,7 +129,7 @@ func TestRewriteInternal(t *testing.T) {
 
 func TestRemoveMissingFileIsNoError(t *testing.T) {
 	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "does-not-exist"))
-	if err := Remove("dev"); err != nil {
+	if err := Remove("dev", ""); err != nil {
 		t.Fatalf("expected nil for missing kubeconfig, got %v", err)
 	}
 }
@@ -139,4 +140,57 @@ func keys[V any](m map[string]V) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// An explicit path wins over $KUBECONFIG. Without it a caller that already has
+// KUBECONFIG pointing at one cluster's file gets a second cluster merged into
+// it, and its current-context switched - which silently redirects every later
+// kubectl call.
+func TestPathOverrideWinsOverEnv(t *testing.T) {
+	t.Setenv("KUBECONFIG", "/tmp/from-env.yaml")
+
+	got, err := Path("")
+	if err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	if got != "/tmp/from-env.yaml" {
+		t.Fatalf("Path(\"\") = %q, want the value from the environment", got)
+	}
+
+	got, err = Path("/tmp/explicit.yaml")
+	if err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	if got != "/tmp/explicit.yaml" {
+		t.Fatalf("Path(override) = %q, want the override", got)
+	}
+}
+
+func TestMergeHonoursPathOverride(t *testing.T) {
+	dir := t.TempDir()
+	env := filepath.Join(dir, "env.yaml")
+	explicit := filepath.Join(dir, "explicit.yaml")
+	t.Setenv("KUBECONFIG", env)
+
+	if err := Merge("dev", []byte(adminKubeconfig), "127.0.0.1", "49153", explicit); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	if _, err := os.Stat(explicit); err != nil {
+		t.Fatalf("override file not written: %v", err)
+	}
+	if _, err := os.Stat(env); !os.IsNotExist(err) {
+		t.Fatalf("the kubeconfig from the environment was touched: %v", err)
+	}
+
+	// Remove must look in the same place, not back at the environment.
+	if err := Remove("dev", explicit); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	cfg, err := clientcmd.LoadFromFile(explicit)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if _, ok := cfg.Contexts[ContextName("dev")]; ok {
+		t.Fatal("context survived Remove on the override path")
+	}
 }

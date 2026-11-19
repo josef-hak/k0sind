@@ -6,6 +6,8 @@
 package e2e
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +60,62 @@ func TestCreateWithOpenEBS(t *testing.T) {
 	// Verify the OpenEBS helm extension deployed pods.
 	assertPodExists(t, "ci-openebs-control-plane", "openebs", "openebs")
 }
+
+// TestKubeconfigFlag is not parallel: it sets KUBECONFIG for the k0sind calls
+// and checks that file is left alone.
+//
+// This is the shape that bit a caller managing two clusters: KUBECONFIG pointed
+// at the first cluster's file, creating the second merged into it and switched
+// its current-context, so every later kubectl talked to the wrong cluster.
+func TestKubeconfigFlag(t *testing.T) {
+	bin := k0sindBin(t)
+	const name = "ci-kcfg"
+	dir := t.TempDir()
+	inUse := filepath.Join(dir, "in-use.yaml")
+	target := filepath.Join(dir, "target.yaml")
+	env := []string{"KUBECONFIG=" + inUse}
+
+	// Something unrelated already lives in the kubeconfig k0sind would pick.
+	if err := os.WriteFile(inUse, []byte(unrelatedKubeconfig), 0o600); err != nil {
+		t.Fatalf("seed kubeconfig: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = runEnv(t, bin, env, "delete", "cluster", "--name", name, "--kubeconfig", target)
+	})
+
+	if err := runEnv(t, bin, env, "create", "cluster", "--name", name,
+		"--kubeconfig", target, "--wait", "120s"); err != nil {
+		t.Fatalf("%s create cluster: %v", markFail, err)
+	}
+
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("%s --kubeconfig file not written: %v", markFail, err)
+	}
+	if !strings.Contains(string(got), "k0sind-"+name) {
+		t.Fatalf("%s context missing from the --kubeconfig file:\n%s", markFail, got)
+	}
+
+	after, err := os.ReadFile(inUse)
+	if err != nil {
+		t.Fatalf("read seeded kubeconfig: %v", err)
+	}
+	if string(after) != unrelatedKubeconfig {
+		t.Fatalf("%s the kubeconfig from the environment was modified:\n%s", markFail, after)
+	}
+	t.Logf("%s cluster %q written to --kubeconfig, $KUBECONFIG untouched", markOK, name)
+}
+
+// unrelatedKubeconfig stands in for a kubeconfig the caller is already using.
+const unrelatedKubeconfig = `apiVersion: v1
+kind: Config
+clusters: []
+contexts: []
+current-context: somewhere-else
+preferences: {}
+users: []
+`
 
 // TestNetworkOverride is not parallel: it drives k0sind through the process
 // environment and checks a bridge it creates itself.

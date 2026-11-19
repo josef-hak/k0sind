@@ -17,9 +17,13 @@ func ContextName(clusterName string) string {
 	return "k0sind-" + clusterName
 }
 
-// Path returns the kubeconfig file to write to: the first entry of $KUBECONFIG
-// if set, otherwise ~/.kube/config.
-func Path() (string, error) {
+// Path returns the kubeconfig file to write to: override when non-empty, then
+// the first entry of $KUBECONFIG, otherwise ~/.kube/config. The override lets a
+// caller keep a cluster out of a kubeconfig that is in use for something else.
+func Path(override string) (string, error) {
+	if override != "" {
+		return override, nil
+	}
 	if env := os.Getenv("KUBECONFIG"); env != "" {
 		return filepath.SplitList(env)[0], nil
 	}
@@ -32,12 +36,12 @@ func Path() (string, error) {
 
 // Merge rewrites the raw admin kubeconfig to point at host:port and merges it
 // into the user's kubeconfig under the k0sind-<name> context, selecting it.
-func Merge(clusterName string, rawAdmin []byte, host, port string) error {
+func Merge(clusterName string, rawAdmin []byte, host, port, kubeconfigPath string) error {
 	incoming, err := rewrite(clusterName, rawAdmin, host, port)
 	if err != nil {
 		return err
 	}
-	path, err := Path()
+	path, err := Path(kubeconfigPath)
 	if err != nil {
 		return err
 	}
@@ -63,8 +67,8 @@ func Merge(clusterName string, rawAdmin []byte, host, port string) error {
 
 // Remove deletes a cluster's context/cluster/user entries from the user's
 // kubeconfig. Missing entries are ignored.
-func Remove(clusterName string) error {
-	path, err := Path()
+func Remove(clusterName, kubeconfigPath string) error {
+	path, err := Path(kubeconfigPath)
 	if err != nil {
 		return err
 	}

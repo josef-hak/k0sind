@@ -52,6 +52,7 @@ type CreateOptions struct {
 	K0sConfigPath string        // optional path to a k0s.yaml config file
 	Image         string        // overrides config/default image
 	Wait          time.Duration // 0 = return once nodes are started, don't wait for Ready
+	Kubeconfig    string        // kubeconfig to write; empty = $KUBECONFIG or ~/.kube/config
 }
 
 func (p *Provider) logf(format string, a ...any) {
@@ -130,13 +131,13 @@ func (p *Provider) Create(opts CreateOptions) error {
 		}
 		return p.prepareNode(controlPlane.Name)
 	}); err != nil {
-		return p.rollback(opts.Name, err)
+		return p.rollback(opts.Name, opts.Kubeconfig, err)
 	}
 
 	if err := p.step("Waiting for the control-plane to be ready", func() error {
 		return waitK0sRunning(p.docker, controlPlane.Name, 3*time.Minute, p.status.Update)
 	}); err != nil {
-		return p.rollback(opts.Name, fmt.Errorf("control-plane did not come up: %w", err))
+		return p.rollback(opts.Name, opts.Kubeconfig, fmt.Errorf("control-plane did not come up: %w", err))
 	}
 
 	// Join workers using a fresh token per worker.
@@ -152,7 +153,7 @@ func (p *Provider) Create(opts CreateOptions) error {
 			}
 			return p.prepareNode(n.Name)
 		}); err != nil {
-			return p.rollback(opts.Name, err)
+			return p.rollback(opts.Name, opts.Kubeconfig, err)
 		}
 	}
 
@@ -160,14 +161,14 @@ func (p *Provider) Create(opts CreateOptions) error {
 		if err := p.step(fmt.Sprintf("Waiting for %d node(s) to be Ready", len(nodes)), func() error {
 			return waitNodesReady(p.docker, controlPlane.Name, len(nodes), opts.Wait, p.status.Update)
 		}); err != nil {
-			return p.rollback(opts.Name, err)
+			return p.rollback(opts.Name, opts.Kubeconfig, err)
 		}
 	}
 
 	if err := p.step(fmt.Sprintf("Exporting kubeconfig (context %q)", kubeconfig.ContextName(opts.Name)), func() error {
-		return p.exportKubeconfig(opts.Name, controlPlane.Name)
+		return p.exportKubeconfig(opts.Name, controlPlane.Name, opts.Kubeconfig)
 	}); err != nil {
-		return p.rollback(opts.Name, fmt.Errorf("export kubeconfig: %w", err))
+		return p.rollback(opts.Name, opts.Kubeconfig, fmt.Errorf("export kubeconfig: %w", err))
 	}
 
 	ctx := kubeconfig.ContextName(opts.Name)
@@ -226,7 +227,7 @@ func (p *Provider) prepareNode(node string) error {
 }
 
 // exportKubeconfig discovers the mapped API port and writes the merged context.
-func (p *Provider) exportKubeconfig(clusterName, controlPlane string) error {
+func (p *Provider) exportKubeconfig(clusterName, controlPlane, kubeconfigPath string) error {
 	host, port, err := p.docker.Port(controlPlane, apiContainerPort)
 	if err != nil {
 		return fmt.Errorf("discover API server port: %w", err)
@@ -239,7 +240,7 @@ func (p *Provider) exportKubeconfig(clusterName, controlPlane string) error {
 	if err != nil {
 		return err
 	}
-	return kubeconfig.Merge(clusterName, []byte(raw), host, port)
+	return kubeconfig.Merge(clusterName, []byte(raw), host, port, kubeconfigPath)
 }
 
 // GetKubeconfig returns the rewritten admin kubeconfig YAML for an existing
@@ -268,12 +269,12 @@ func (p *Provider) GetKubeconfig(name string, internal bool) ([]byte, error) {
 }
 
 // ExportKubeconfig re-exports the kubeconfig for an existing cluster.
-func (p *Provider) ExportKubeconfig(name string) error {
+func (p *Provider) ExportKubeconfig(name, kubeconfigPath string) error {
 	if name == "" {
 		name = config.DefaultClusterName
 	}
 	cp := name + "-control-plane"
-	if err := p.exportKubeconfig(name, cp); err != nil {
+	if err := p.exportKubeconfig(name, cp, kubeconfigPath); err != nil {
 		return err
 	}
 	p.logf("Exported kubeconfig context %q.", kubeconfig.ContextName(name))
@@ -281,9 +282,9 @@ func (p *Provider) ExportKubeconfig(name string) error {
 }
 
 // rollback tears down a partially-created cluster and wraps the original error.
-func (p *Provider) rollback(name string, cause error) error {
+func (p *Provider) rollback(name, kubeconfigPath string, cause error) error {
 	p.logf("Rolling back cluster %q due to error ...", name)
-	if err := p.Delete(name); err != nil {
+	if err := p.Delete(name, kubeconfigPath); err != nil {
 		p.logf("WARNING: rollback cleanup failed: %v", err)
 	}
 	return cause
@@ -291,7 +292,7 @@ func (p *Provider) rollback(name string, cause error) error {
 
 // Delete removes all containers for a cluster, its kubeconfig context, and the
 // shared network if no other cluster is using it.
-func (p *Provider) Delete(name string) error {
+func (p *Provider) Delete(name, kubeconfigPath string) error {
 	if name == "" {
 		name = config.DefaultClusterName
 	}
@@ -306,7 +307,7 @@ func (p *Provider) Delete(name string) error {
 	if err := p.docker.Remove(ids...); err != nil {
 		return err
 	}
-	if err := kubeconfig.Remove(name); err != nil {
+	if err := kubeconfig.Remove(name, kubeconfigPath); err != nil {
 		p.logf("WARNING: could not update kubeconfig: %v", err)
 	}
 	// Nothing references a generated k0s config once the nodes are gone.
