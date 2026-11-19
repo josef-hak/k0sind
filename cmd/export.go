@@ -15,15 +15,16 @@ func newExportCmd() *cobra.Command {
 }
 
 func newExportKubeconfigCmd() *cobra.Command {
-	var name string
+	var name, kubeconfigPath string
 	cmd := &cobra.Command{
 		Use:   "kubeconfig",
 		Short: "Export a cluster's kubeconfig into ~/.kube/config",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cluster.NewProvider().ExportKubeconfig(name)
+			return cluster.NewProvider().ExportKubeconfig(name, kubeconfigPath)
 		},
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "cluster name (default \"k0sind\")")
+	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig", "", "sets kubeconfig path instead of $KUBECONFIG or $HOME/.kube/config")
 	return cmd
 }
