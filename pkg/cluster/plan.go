@@ -27,6 +27,14 @@ const (
 
 	// apiContainerPort is the port the k0s API server listens on inside the container.
 	apiContainerPort = 6443
+
+	// KubeletRootDir is where the kubelet keeps its state. k0s defaults to
+	// <data-dir>/kubelet, i.e. /var/lib/k0s/kubelet, but charts that have to
+	// name the path assume the upstream default: velero's node-agent
+	// (nodeAgent.podVolumePath), CSI drivers (kubeletRootDir), datadog's
+	// system-probe (seccompRoot). Putting it where every other distribution
+	// has it - kind included - means those charts work unmodified.
+	KubeletRootDir = "/var/lib/kubelet"
 )
 
 // DefaultNodeImage returns the node image to use when neither --image nor the
@@ -99,7 +107,7 @@ func plan(clusterName string, c *v1alpha4.Cluster, image, k0sConfigPath string) 
 			Role:       n.Role,
 			Image:      img,
 			Privileged: true,
-			Volumes:    []string{"/var/lib/k0s", "/var/log/pods"},
+			Volumes:    []string{"/var/lib/k0s", "/var/log/pods", KubeletRootDir},
 			Tmpfs:      []string{"/run"},
 			Labels: map[string]string{
 				LabelCluster: clusterName,
@@ -163,12 +171,13 @@ func (n planNode) k0sCommand(token string) []string {
 		if n.single {
 			cmd = append(cmd, "--no-taints")
 		}
+		cmd = append(cmd, "--kubelet-root-dir", KubeletRootDir)
 		if n.k0sConfigPath != "" {
 			cmd = append(cmd, "--config", k0sConfigContainerPath)
 		}
 		return cmd
 	}
-	return []string{"k0s", "worker", token}
+	return []string{"k0s", "worker", token, "--kubelet-root-dir", KubeletRootDir}
 }
 
 // mountArg renders a kind Mount as a docker -v value.

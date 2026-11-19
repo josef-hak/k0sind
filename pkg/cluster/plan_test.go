@@ -25,7 +25,8 @@ func TestPlanSingleNode(t *testing.T) {
 		t.Fatal("expected single=true for one-node cluster")
 	}
 	got := n.k0sCommand("")
-	want := []string{"k0s", "controller", "--enable-worker", "--no-taints"}
+	want := []string{"k0s", "controller", "--enable-worker", "--no-taints",
+		"--kubelet-root-dir", KubeletRootDir}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("cmd = %v, want %v", got, want)
 	}
@@ -64,7 +65,7 @@ func TestPlanControlPlaneWithWorkers(t *testing.T) {
 	}
 	// Workers join via token.
 	w := nodes[1].k0sCommand("tok123")
-	if !reflect.DeepEqual(w, []string{"k0s", "worker", "tok123"}) {
+	if !reflect.DeepEqual(w, []string{"k0s", "worker", "tok123", "--kubelet-root-dir", KubeletRootDir}) {
 		t.Fatalf("worker cmd = %v", w)
 	}
 }
@@ -125,6 +126,39 @@ func TestDefaultNodeImage(t *testing.T) {
 		t.Setenv(K0sVersionEnv, c.env)
 		if got := DefaultNodeImage(); got != c.want {
 			t.Errorf("K0S_VERSION=%q: got %q, want %q", c.env, got, c.want)
+		}
+	}
+}
+
+// Charts that have to name the kubelet root (velero's node-agent, CSI drivers,
+// datadog's system-probe) assume the upstream path, so every node must put the
+// kubelet there rather than under the k0s data dir.
+func TestKubeletRootDirIsUpstreamDefault(t *testing.T) {
+	c := &v1alpha4.Cluster{
+		Nodes: []v1alpha4.Node{
+			{Role: v1alpha4.ControlPlaneRole},
+			{Role: v1alpha4.WorkerRole},
+		},
+		Networking: v1alpha4.Networking{APIServerAddress: "127.0.0.1"},
+	}
+	if KubeletRootDir != "/var/lib/kubelet" {
+		t.Fatalf("KubeletRootDir = %q, want the upstream default", KubeletRootDir)
+	}
+	for _, n := range plan("dev", c, "img:1", "") {
+		cmd := strings.Join(n.k0sCommand("tok"), " ")
+		if !strings.Contains(cmd, "--kubelet-root-dir "+KubeletRootDir) {
+			t.Errorf("%s: cmd %q does not set the kubelet root", n.Name, cmd)
+		}
+		// The kubelet state belongs on a volume, like the k0s data dir, not on
+		// the container's overlay filesystem.
+		var found bool
+		for _, v := range n.Volumes {
+			if v == KubeletRootDir {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s: %q missing from volumes %v", n.Name, KubeletRootDir, n.Volumes)
 		}
 	}
 }

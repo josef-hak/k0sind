@@ -23,6 +23,21 @@ func k0sindBin(t *testing.T) string {
 func TestCreateSingleNode(t *testing.T) {
 	t.Parallel()
 	runScenario(t, "ci-single", nil, 1, 120*time.Second)
+	assertKubeletRootDir(t, "ci-single-control-plane")
+}
+
+// assertKubeletRootDir checks the kubelet keeps its state at the upstream path.
+// Charts that have to name it (velero's node-agent, CSI drivers, datadog's
+// system-probe) assume that path, and silently misbehave when it moves.
+func assertKubeletRootDir(t *testing.T, cp string) {
+	t.Helper()
+	if out, err := docker(t, "exec", cp, "ls", "-d", "/var/lib/kubelet/pods"); err != nil {
+		t.Fatalf("%s kubelet root is not at /var/lib/kubelet: %v\n%s", markFail, err, out)
+	}
+	if out, err := docker(t, "exec", cp, "ls", "-d", "/var/lib/k0s/kubelet"); err == nil {
+		t.Fatalf("%s kubelet state still under the k0s data dir:\n%s", markFail, out)
+	}
+	t.Logf("%s kubelet root of %s is /var/lib/kubelet", markOK, cp)
 }
 
 func TestCreateOneControlPlaneTwoWorkers(t *testing.T) {
