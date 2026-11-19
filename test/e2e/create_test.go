@@ -198,6 +198,13 @@ func assertPropagationWorkloadRuns(t *testing.T, cp string) {
 			return
 		case strings.Contains(out, "CreateContainerError"):
 			t.Fatalf("%s propagation probe rejected by the kubelet:\n%s", markFail, out)
+		case strings.Contains(out, "Evicted"):
+			// Terminal, and nothing to do with mount propagation: the node is
+			// under resource pressure. On a host with a full-ish disk the
+			// kubelet's default imagefs threshold (15% of the *host* fs) trips
+			// and it evicts whatever it can.
+			t.Fatalf("%s probe evicted - the node is under pressure, not a propagation failure:\n%s",
+				markFail, out)
 		case time.Now().After(deadline):
 			t.Fatalf("%s propagation probe did not start in time:\n%s", markFail, out)
 		}
