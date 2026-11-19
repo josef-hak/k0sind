@@ -138,6 +138,25 @@ A `KubeletConfiguration` patch is the exception: k0s has a direct counterpart in
 which every node picks up. See `examples/kubelet-config.yaml`. Patches are
 merged key by key at the top level, where kind would apply a strategic merge.
 
+## Node differences from stock k0s
+
+k0sind nodes are throwaway containers, so two things are set up the way kind
+does them rather than the way k0s would on a real host:
+
+- **Mounts are shared.** `mount --make-rshared /` runs on every node right after
+  its container starts. The k0s image leaves them private, which makes the
+  kubelet refuse any pod that hostPath-mounts with mount propagation — CNI
+  agents, storage drivers, node agents. kind does the same in its node
+  entrypoint.
+- **The kubelet root is `/var/lib/kubelet`**, not k0s's `/var/lib/k0s/kubelet`
+  (`k0s --kubelet-root-dir`). Charts that have to name the path work with their
+  own defaults: velero's `nodeAgent.podVolumePath`, CSI drivers'
+  `kubeletRootDir`, datadog's `systemProbe.seccompRoot`.
+
+  The trade-off is worth knowing: a chart validated on k0sind is not proof it
+  runs on a stock k0s host, where that path differs. k0sind is a kind
+  replacement first.
+
 ## Topology
 
 - **One shared bridge.** Every cluster joins the same docker network (`kind` by
