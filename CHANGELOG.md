@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/k0sind/k0sind/compare/v1.4.0...v1.5.0) (2026-11-20)
+
+
+### Features
+
+* follow k0s for the kubelet root, add --kubelet-root-dir ([7e0fd45](https://github.com/k0sind/k0sind/commit/7e0fd45c40ce72259006a56dbda16b525f08408d))
+
 ## [1.4.0](https://github.com/k0sind/k0sind/compare/v1.3.0...v1.4.0) (2026-11-19)
 
 
