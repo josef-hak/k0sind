@@ -104,6 +104,7 @@ k0sind create cluster -n k0s-calico --k0s-config examples/k0s-calico.yaml
 | `--image` | pinned k0s release | k0s node image override |
 | `--wait` | `0` | Wait for all nodes to be `Ready` (e.g. `120s`); `0` returns once started |
 | `--kubeconfig` | – | Kubeconfig to write instead of `$KUBECONFIG` or `~/.kube/config`. Also on `delete cluster` and `export kubeconfig` |
+| `--kubelet-root-dir` | k0s default | Kubelet state directory. Set `/var/lib/kubelet` for chart sets that assume the upstream path |
 
 ### Environment
 
@@ -137,6 +138,28 @@ A `KubeletConfiguration` patch is the exception: k0s has a direct counterpart in
 `spec.workerProfiles`, so k0sind lifts the patch into the `default` profile,
 which every node picks up. See `examples/kubelet-config.yaml`. Patches are
 merged key by key at the top level, where kind would apply a strategic merge.
+
+## Node differences from stock k0s
+
+k0sind nodes are throwaway containers, so one thing is set up the way kind does
+it rather than the way k0s would on a real host: **mounts are shared**.
+`mount --make-rshared /` runs on every node right after its container starts.
+The k0s image leaves them private, which makes the kubelet refuse any pod that
+hostPath-mounts with mount propagation — CNI agents, storage drivers, node
+agents. kind does the same in its node entrypoint.
+
+The kubelet root is **not** one of them: it stays where k0s puts it,
+`<data-dir>/kubelet`. A cluster here should behave like the distribution it
+runs, so charts that have to name the path — velero's
+`nodeAgent.podVolumePath`, CSI drivers' `kubeletRootDir`, datadog's
+`systemProbe.seccompRoot` — need the same values they would on a real k0s host,
+and a chart validated here is validated for k0s.
+
+Porting a chart set from kind that assumes `/var/lib/kubelet`? Move it:
+
+~~~bash
+k0sind create cluster --kubelet-root-dir /var/lib/kubelet
+~~~
 
 ## Topology
 

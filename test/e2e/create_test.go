@@ -25,21 +25,36 @@ func k0sindBin(t *testing.T) string {
 func TestCreateSingleNode(t *testing.T) {
 	t.Parallel()
 	runScenario(t, "ci-single", nil, 1, 120*time.Second)
-	assertKubeletRootDir(t, "ci-single-control-plane")
+	assertKubeletRootDir(t, "ci-single-control-plane", "/var/lib/k0s/kubelet", "/var/lib/kubelet")
 }
 
-// assertKubeletRootDir checks the kubelet keeps its state at the upstream path.
-// Charts that have to name it (velero's node-agent, CSI drivers, datadog's
-// system-probe) assume that path, and silently misbehave when it moves.
-func assertKubeletRootDir(t *testing.T, cp string) {
+// assertKubeletRootDir checks where the kubelet keeps its state. Charts that
+// have to name it - velero's node-agent, CSI drivers, datadog's system-probe -
+// silently misbehave when it is not where they expect.
+func assertKubeletRootDir(t *testing.T, cp, want, notWant string) {
 	t.Helper()
-	if out, err := docker(t, "exec", cp, "ls", "-d", "/var/lib/kubelet/pods"); err != nil {
-		t.Fatalf("%s kubelet root is not at /var/lib/kubelet: %v\n%s", markFail, err, out)
+	if out, err := docker(t, "exec", cp, "ls", "-d", want+"/pods"); err != nil {
+		t.Fatalf("%s kubelet root is not at %s: %v\n%s", markFail, want, err, out)
 	}
-	if out, err := docker(t, "exec", cp, "ls", "-d", "/var/lib/k0s/kubelet"); err == nil {
-		t.Fatalf("%s kubelet state still under the k0s data dir:\n%s", markFail, out)
+	// The directory itself is no evidence: the kubelet keeps its device-plugin
+	// sockets at /var/lib/kubelet whatever its root is. pods/ is the marker.
+	if out, err := docker(t, "exec", cp, "ls", "-d", notWant+"/pods"); err == nil {
+		t.Fatalf("%s kubelet state also at %s:\n%s", markFail, notWant, out)
 	}
-	t.Logf("%s kubelet root of %s is /var/lib/kubelet", markOK, cp)
+	t.Logf("%s kubelet root of %s is %s", markOK, cp, want)
+}
+
+// TestKubeletRootDirOverride is not parallel: it creates its own cluster to
+// check the flag, the way a chart set ported from kind would need it.
+func TestKubeletRootDirOverride(t *testing.T) {
+	bin := k0sindBin(t)
+	const name = "ci-kroot"
+	t.Cleanup(func() { _ = run(t, bin, "delete", "cluster", "--name", name) })
+	if err := run(t, bin, "create", "cluster", "--name", name,
+		"--kubelet-root-dir", "/var/lib/kubelet", "--wait", "120s"); err != nil {
+		t.Fatalf("%s create cluster: %v", markFail, err)
+	}
+	assertKubeletRootDir(t, name+"-control-plane", "/var/lib/kubelet", "/var/lib/k0s/kubelet")
 }
 
 func TestCreateOneControlPlaneTwoWorkers(t *testing.T) {

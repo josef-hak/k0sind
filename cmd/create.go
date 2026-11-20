@@ -23,6 +23,7 @@ func newCreateClusterCmd() *cobra.Command {
 		k0sConfig      string
 		image          string
 		kubeconfigPath string
+		kubeletRootDir string
 		wait           time.Duration
 	)
 	cmd := &cobra.Command{
@@ -31,12 +32,13 @@ func newCreateClusterCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cluster.NewProvider().Create(cluster.CreateOptions{
-				Name:          name,
-				ConfigPath:    config,
-				K0sConfigPath: k0sConfig,
-				Image:         image,
-				Wait:          wait,
-				Kubeconfig:    kubeconfigPath,
+				Name:           name,
+				ConfigPath:     config,
+				K0sConfigPath:  k0sConfig,
+				Image:          image,
+				Wait:           wait,
+				Kubeconfig:     kubeconfigPath,
+				KubeletRootDir: kubeletRootDir,
 			})
 		},
 	}
@@ -44,6 +46,7 @@ func newCreateClusterCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config, "config", "", "path to a kind-compatible config file")
 	cmd.Flags().StringVar(&k0sConfig, "k0s-config", "", "path to a k0s configuration file (k0s.yaml)")
 	cmd.Flags().StringVar(&image, "image", "", "k0s node image to use (overrides the default)")
+	cmd.Flags().StringVar(&kubeletRootDir, "kubelet-root-dir", "", "kubelet state directory (default: the k0s one, <data-dir>/kubelet)")
 	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig", "", "sets kubeconfig path instead of $KUBECONFIG or $HOME/.kube/config")
 	cmd.Flags().DurationVar(&wait, "wait", 0, "wait for all nodes to be Ready (e.g. 120s); 0 disables waiting")
 	return cmd

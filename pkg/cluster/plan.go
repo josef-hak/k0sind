@@ -31,13 +31,16 @@ const (
 	// apiContainerPort is the port the k0s API server listens on inside the container.
 	apiContainerPort = 6443
 
-	// KubeletRootDir is where the kubelet keeps its state. k0s defaults to
-	// <data-dir>/kubelet, i.e. /var/lib/k0s/kubelet, but charts that have to
-	// name the path assume the upstream default: velero's node-agent
-	// (nodeAgent.podVolumePath), CSI drivers (kubeletRootDir), datadog's
-	// system-probe (seccompRoot). Putting it where every other distribution
-	// has it - kind included - means those charts work unmodified.
-	KubeletRootDir = "/var/lib/kubelet"
+	// UpstreamKubeletRootDir is where every other distribution, kind included,
+	// keeps the kubelet state. k0s uses <data-dir>/kubelet instead, and k0sind
+	// follows k0s: a cluster here should behave like the distribution it runs.
+	// Charts that have to name the path - velero's nodeAgent.podVolumePath,
+	// CSI drivers' kubeletRootDir, datadog's systemProbe.seccompRoot - then
+	// need the same values they would need on a real k0s host.
+	//
+	// Pass --kubelet-root-dir to move it, e.g. when porting a chart set from
+	// kind that assumes the upstream path.
+	UpstreamKubeletRootDir = "/var/lib/kubelet"
 )
 
 // NetworkName returns the bridge every node joins: the default, or the value of
@@ -83,16 +86,17 @@ func imageTag(version string) string {
 // a kind config. Everything except the worker join token is known up front; the
 // token is injected at run time via runSpec.
 type planNode struct {
-	Name          string
-	Role          v1alpha4.NodeRole
-	Image         string
-	Privileged    bool
-	Volumes       []string
-	Tmpfs         []string
-	Ports         []string
-	Labels        map[string]string
-	single        bool   // true when the whole cluster is this one node
-	k0sConfigPath string // host path to k0s.yaml; mounted into the container when non-empty
+	Name           string
+	Role           v1alpha4.NodeRole
+	Image          string
+	Privileged     bool
+	Volumes        []string
+	Tmpfs          []string
+	Ports          []string
+	Labels         map[string]string
+	single         bool   // true when the whole cluster is this one node
+	k0sConfigPath  string // host path to k0s.yaml; mounted into the container when non-empty
+	kubeletRootDir string // overrides the k0s default when non-empty
 }
 
 // isControlPlane reports whether the node runs the k0s controller.
@@ -100,8 +104,14 @@ func (n planNode) isControlPlane() bool { return n.Role == v1alpha4.ControlPlane
 
 // plan translates a kind cluster into ordered node descriptors. The control-plane
 // node is always first so it can be started (and a join token minted) before workers.
-func plan(clusterName string, c *v1alpha4.Cluster, image, k0sConfigPath string) []planNode {
+func plan(clusterName string, c *v1alpha4.Cluster, image, k0sConfigPath, kubeletRootDir string) []planNode {
 	single := len(c.Nodes) == 1
+	// A relocated kubelet root falls outside the k0s data dir, so it needs a
+	// volume of its own to stay off the container's overlay filesystem.
+	volumes := []string{"/var/lib/k0s", "/var/log/pods"}
+	if kubeletRootDir != "" {
+		volumes = append(volumes, kubeletRootDir)
+	}
 	var nodes []planNode
 	workerIdx := 0
 	for _, n := range c.Nodes {
@@ -125,13 +135,14 @@ func plan(clusterName string, c *v1alpha4.Cluster, image, k0sConfigPath string) 
 			Role:       n.Role,
 			Image:      img,
 			Privileged: true,
-			Volumes:    []string{"/var/lib/k0s", "/var/log/pods", KubeletRootDir},
+			Volumes:    volumes,
 			Tmpfs:      []string{"/run"},
 			Labels: map[string]string{
 				LabelCluster: clusterName,
 				LabelRole:    string(n.Role),
 			},
-			single: single,
+			single:         single,
+			kubeletRootDir: kubeletRootDir,
 		}
 		for _, m := range n.ExtraMounts {
 			pn.Volumes = append(pn.Volumes, mountArg(m))
@@ -189,13 +200,19 @@ func (n planNode) k0sCommand(token string) []string {
 		if n.single {
 			cmd = append(cmd, "--no-taints")
 		}
-		cmd = append(cmd, "--kubelet-root-dir", KubeletRootDir)
+		if n.kubeletRootDir != "" {
+			cmd = append(cmd, "--kubelet-root-dir", n.kubeletRootDir)
+		}
 		if n.k0sConfigPath != "" {
 			cmd = append(cmd, "--config", k0sConfigContainerPath)
 		}
 		return cmd
 	}
-	return []string{"k0s", "worker", token, "--kubelet-root-dir", KubeletRootDir}
+	cmd := []string{"k0s", "worker", token}
+	if n.kubeletRootDir != "" {
+		cmd = append(cmd, "--kubelet-root-dir", n.kubeletRootDir)
+	}
+	return cmd
 }
 
 // mountArg renders a kind Mount as a docker -v value.
