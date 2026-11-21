@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/k0sind/k0sind/compare/v1.5.0...v1.6.0) (2026-11-21)
+
+
+### Features
+
+* add export logs ([0cc3474](https://github.com/k0sind/k0sind/commit/0cc34749356409803adc914d53261550ec5c1478))
+
 ## [1.5.0](https://github.com/k0sind/k0sind/compare/v1.4.0...v1.5.0) (2026-11-20)
 
 
