@@ -49,7 +49,10 @@ func assertKubeletRootDir(t *testing.T, cp, want, notWant string) {
 func TestKubeletRootDirOverride(t *testing.T) {
 	bin := k0sindBin(t)
 	const name = "ci-kroot"
-	t.Cleanup(func() { _ = run(t, bin, "delete", "cluster", "--name", name) })
+	t.Cleanup(func() {
+		dumpOnFailure(t, bin, name)
+		_ = run(t, bin, "delete", "cluster", "--name", name)
+	})
 	if err := run(t, bin, "create", "cluster", "--name", name,
 		"--kubelet-root-dir", "/var/lib/kubelet", "--wait", "120s"); err != nil {
 		t.Fatalf("%s create cluster: %v", markFail, err)
@@ -64,7 +67,10 @@ func TestExportLogs(t *testing.T) {
 	bin := k0sindBin(t)
 	const name = "ci-logs"
 	cp := name + "-control-plane"
-	t.Cleanup(func() { _ = run(t, bin, "delete", "cluster", "--name", name) })
+	t.Cleanup(func() {
+		dumpOnFailure(t, bin, name)
+		_ = run(t, bin, "delete", "cluster", "--name", name)
+	})
 
 	if err := run(t, bin, "create", "cluster", "--name", name, "--wait", "120s"); err != nil {
 		t.Fatalf("%s create cluster: %v", markFail, err)
@@ -137,6 +143,7 @@ func TestKubeconfigFlag(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
+		dumpOnFailure(t, bin, name)
 		_ = runEnv(t, bin, env, "delete", "cluster", "--name", name, "--kubeconfig", target)
 	})
 
@@ -182,6 +189,7 @@ func TestNetworkOverride(t *testing.T) {
 	env := []string{"KIND_EXPERIMENTAL_DOCKER_NETWORK=" + network}
 
 	t.Cleanup(func() {
+		dumpOnFailure(t, bin, name)
 		_ = runEnv(t, bin, env, "delete", "cluster", "--name", name)
 		// A network named by the caller is theirs: k0sind must leave it.
 		if out, err := docker(t, "network", "inspect", network, "--format", "{{.Name}}"); err != nil {
@@ -350,8 +358,10 @@ func runScenario(t *testing.T, name string, extraArgs []string, wantNodes int, w
 	bin := k0sindBin(t)
 	cp := name + "-control-plane"
 
-	// Always clean up, even on failure.
+	// Always clean up, even on failure — but dump the cluster first, because
+	// deleting it is what destroys the evidence.
 	t.Cleanup(func() {
+		dumpOnFailure(t, bin, name)
 		_ = run(t, bin, "delete", "cluster", "--name", name)
 		if out, _ := docker(t, "ps", "-aq", "--filter", "label=io.k0sind.cluster="+name); strings.TrimSpace(out) != "" {
 			t.Errorf("containers for %q survived deletion: %q", name, out)

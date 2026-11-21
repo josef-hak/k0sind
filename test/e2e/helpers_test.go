@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -205,4 +206,33 @@ func podChanges(now, before []pod) []pod {
 	}
 	sort.Slice(changed, func(i, j int) bool { return changed[i].name < changed[j].name })
 	return changed
+}
+
+// diagnosticsRoot is where a failing test leaves its dump. Not t.TempDir: that
+// is removed when the test ends, which is exactly when the dump gets
+// interesting. CI points this at a directory it uploads.
+func diagnosticsRoot() string {
+	return envOr("K0SIND_DIAGNOSTICS_DIR", filepath.Join("..", "..", "diagnostics"))
+}
+
+// dumpOnFailure exports the cluster's logs when the test has failed, and must
+// run before the cluster is deleted. That ordering is why it lives in the
+// test's own cleanup and not in a CI step: Go runs cleanups as the test
+// returns, so a workflow step that looks afterwards finds the containers
+// already gone.
+func dumpOnFailure(t *testing.T, bin, cluster string) {
+	t.Helper()
+	if !t.Failed() {
+		return
+	}
+	dir := filepath.Join(diagnosticsRoot(), cluster)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Logf("%s diagnostics dir %s: %v", markFail, dir, err)
+		return
+	}
+	if err := run(t, bin, "export", "logs", "--name", cluster, dir); err != nil {
+		t.Logf("%s export logs: %v", markFail, err)
+		return
+	}
+	t.Logf("%s diagnostics exported to %s", markOK, dir)
 }

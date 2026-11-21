@@ -142,9 +142,14 @@ jobs:
       # format is the failure summary and nothing at all on a green run, so the
       # verdict lines coming through from go test are coloured here. The
       # artifact copy has every escape stripped so it reads as plain text.
+      # A failing test exports its own cluster before deleting it, into
+      # K0SIND_DIAGNOSTICS_DIR; see dumpOnFailure. Doing that from a step here
+      # instead would find nothing, because Go runs the test's cleanup — and so
+      # the delete — before this job moves on.
       - name: Run e2e scenario (${{ matrix.scenario.name }})
         env:
           K0SIND_BIN: /usr/local/bin/k0sind
+          K0SIND_DIAGNOSTICS_DIR: ${{ github.workspace }}/diagnostics
         run: |
           set -o pipefail
           green=$'\033[32m'; red=$'\033[31m'; yellow=$'\033[33m'; off=$'\033[0m'
@@ -159,30 +164,11 @@ jobs:
                      -e "s/^--- FAIL.*/${red}&${off}/" \
                      -e "s/^(FAIL|panic:).*/${red}&${off}/" \
                      -e "s/^--- SKIP.*/${yellow}&${off}/"
-      # Collected into files rather than echoed inline: a failing cluster
-      # produces more than fits in a readable log, and an artifact can be read
-      # after the run instead of scrolled during it.
-      - name: Collect diagnostics
+      - name: Summarise the dump
         if: failure()
         run: |
-          mkdir -p diagnostics
-          docker ps -a --filter label=io.k0sind.cluster > diagnostics/containers.txt 2>&1 || true
-          name() { docker inspect -f '{{.Name}}' "$1" | tr -d '/'; }
-          for c in $(docker ps -aq --filter label=io.k0sind.cluster); do
-            docker logs "$c" > "diagnostics/$(name "$c").docker.log" 2>&1 || true
-          done
-          for c in $(docker ps -aq --filter label=io.k0sind.role=control-plane); do
-            n=$(name "$c")
-            docker exec "$c" k0s status > "diagnostics/$n.k0s-status.txt" 2>&1 || true
-            for q in "get nodes -o wide" "get pods -A -o wide" "describe nodes" \
-                     "get events -A --sort-by=.lastTimestamp" "describe pods -A"; do
-              f=$(echo "$q" | tr -c 'a-zA-Z0-9' '-' | cut -c1-40)
-              # shellcheck disable=SC2086
-              docker exec "$c" k0s kubectl $q > "diagnostics/$n.$f.txt" 2>&1 || true
-            done
-          done
-          echo "::group::pods"; cat diagnostics/*get-pods* 2>/dev/null || true; echo "::endgroup::"
-          echo "::group::events"; tail -n 50 diagnostics/*events* 2>/dev/null || true; echo "::endgroup::"
+          echo "::group::pods"; cat diagnostics/*/*/kubectl-pods.txt 2>/dev/null || true; echo "::endgroup::"
+          echo "::group::events"; tail -n 50 diagnostics/*/*/kubectl-events.txt 2>/dev/null || true; echo "::endgroup::"
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
