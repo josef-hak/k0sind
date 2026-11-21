@@ -135,18 +135,28 @@ jobs:
       - name: Build k0sind
         run: go build -o /usr/local/bin/k0sind .
       # standard-verbose keeps every t.Logf line — the pod tables are the point
-      # of the e2e log — and adds gotestsum's coloured verdicts on top. The
-      # artifact copy has the escapes stripped so it reads as plain text.
+      # of the e2e log, and the compact formats hide the output of tests that
+      # pass. gotestsum only colours what it renders itself, which in this
+      # format is the failure summary and nothing at all on a green run, so the
+      # verdict lines coming through from go test are coloured here. The
+      # artifact copy has every escape stripped so it reads as plain text.
       - name: Run e2e scenario (${{ matrix.scenario.name }})
         env:
           K0SIND_BIN: /usr/local/bin/k0sind
         run: |
           set -o pipefail
+          green=$'\033[32m'; red=$'\033[31m'; yellow=$'\033[33m'; off=$'\033[0m'
           go tool gotestsum --format standard-verbose --no-color=false \
             --jsonfile e2e.jsonl --junitfile e2e-junit.xml \
             -- -tags e2e ./test/e2e/... \
             -run '^${{ matrix.scenario.test }}$' -timeout 20m \
-            2>&1 | tee >(sed -e 's/\x1b\[[0-9;]*m//g' > e2e.log)
+            2>&1 \
+            | tee >(sed -e 's/\x1b\[[0-9;]*m//g' > e2e.log) \
+            | sed -E -e "s/^--- PASS.*/${green}&${off}/" \
+                     -e "s/^(ok|PASS)([[:space:]].*)?$/${green}&${off}/" \
+                     -e "s/^--- FAIL.*/${red}&${off}/" \
+                     -e "s/^(FAIL|panic:).*/${red}&${off}/" \
+                     -e "s/^--- SKIP.*/${yellow}&${off}/"
       # Collected into files rather than echoed inline: a failing cluster
       # produces more than fits in a readable log, and an artifact can be read
       # after the run instead of scrolled during it.
