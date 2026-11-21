@@ -42,12 +42,57 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      # -json keeps the machine-readable record in gotest.jsonl for the summary
+      # below, while the jq filter prints one line per test so the log reads as
+      # a list of what ran rather than a wall of package results.
       - name: Unit tests (no docker)
-        run: go test ./... -race -coverprofile=cover.out
+        run: |
+          set -o pipefail
+          go test ./... -race -covermode=atomic -coverprofile=cover.out -json \
+            | tee gotest.jsonl \
+            | jq -r 'select(.Test != null and (.Action == "pass" or .Action == "fail" or .Action == "skip"))
+                     | "\(.Action | ascii_upcase) \(.Package | sub("^github.com/k0sproject/k0sind/?"; "") ) \(.Test) (\(.Elapsed)s)"'
+      # Failures scroll off the top of a long log; the job summary is the first
+      # thing a PR shows, so put the counts and the failed names there.
+      - name: Test summary
+        if: always()
+        run: |
+          [ -f gotest.jsonl ] || exit 0
+          count() { jq -r "select(.Test != null and .Action == \"$1\") | .Test" gotest.jsonl | wc -l; }
+          cov=$(go tool cover -func=cover.out 2>/dev/null | awk '/^total:/ {print $3}')
+          {
+            echo "## Unit tests"
+            echo
+            echo "| passed | failed | skipped | coverage |"
+            echo "|-------:|-------:|--------:|---------:|"
+            echo "| $(count pass) | $(count fail) | $(count skip) | ${cov:-n/a} |"
+            if [ "$(count fail)" -gt 0 ]; then
+              echo
+              echo "### Failed"
+              echo
+              jq -r 'select(.Test != null and .Action == "fail")
+                     | "- `\(.Package | sub("^github.com/k0sproject/k0sind/?"; "")) \(.Test)`"' gotest.jsonl
+              echo
+              echo "<details><summary>Output</summary>"
+              echo
+              echo '```'
+              jq -r 'select(.Action == "output" and .Test != null) | .Output' gotest.jsonl | grep -E '^\s+' | head -200
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Coverage report
+        if: always()
+        run: go tool cover -html=cover.out -o coverage.html || true
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
-          name: coverage
-          path: cover.out
+          name: unit-test-output
+          path: |
+            cover.out
+            coverage.html
+            gotest.jsonl
 
   e2e:
     # Independent of lint-build/unit so it runs in parallel with them (e2e is the
@@ -58,6 +103,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Every Test* in test/e2e belongs here; TestE2EMatrixIsComplete fails
+        # the unit job when one is missing, because a scenario nobody runs is
+        # worse than no scenario at all.
         scenario:
           - name: single-node
             test: TestCreateSingleNode
@@ -67,6 +115,16 @@ jobs:
             test: TestCreateWithCalico
           - name: k0s-openebs
             test: TestCreateWithOpenEBS
+          - name: kubeconfig-flag
+            test: TestKubeconfigFlag
+          - name: kubelet-config
+            test: TestKubeletConfigPatch
+          - name: kubelet-root-dir
+            test: TestKubeletRootDirOverride
+          - name: mount-propagation
+            test: TestMountPropagation
+          - name: network-override
+            test: TestNetworkOverride
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -78,13 +136,38 @@ jobs:
       - name: Run e2e scenario (${{ matrix.scenario.name }})
         env:
           K0SIND_BIN: /usr/local/bin/k0sind
-        run: go test -tags e2e ./test/e2e/... -run '${{ matrix.scenario.test }}' -v -timeout 20m
-      - name: Diagnostics on failure
-        if: always()
         run: |
-          echo "=== containers ==="
-          docker ps -a --filter label=io.k0sind.cluster || true
-          for c in $(docker ps -aq --filter label=io.k0sind.role=control-plane); do
-            echo "=== logs $c ==="; docker logs --tail 100 "$c" || true
-            echo "=== pods $c ==="; docker exec "$c" k0s kubectl get pods -A || true
+          set -o pipefail
+          go test -tags e2e ./test/e2e/... \
+            -run '^${{ matrix.scenario.test }}$' -v -timeout 20m 2>&1 | tee e2e.log
+      # Collected into files rather than echoed inline: a failing cluster
+      # produces more than fits in a readable log, and an artifact can be read
+      # after the run instead of scrolled during it.
+      - name: Collect diagnostics
+        if: failure()
+        run: |
+          mkdir -p diagnostics
+          docker ps -a --filter label=io.k0sind.cluster > diagnostics/containers.txt 2>&1 || true
+          name() { docker inspect -f '{{.Name}}' "$1" | tr -d '/'; }
+          for c in $(docker ps -aq --filter label=io.k0sind.cluster); do
+            docker logs "$c" > "diagnostics/$(name "$c").docker.log" 2>&1 || true
           done
+          for c in $(docker ps -aq --filter label=io.k0sind.role=control-plane); do
+            n=$(name "$c")
+            docker exec "$c" k0s status > "diagnostics/$n.k0s-status.txt" 2>&1 || true
+            for q in "get nodes -o wide" "get pods -A -o wide" "describe nodes" \
+                     "get events -A --sort-by=.lastTimestamp" "describe pods -A"; do
+              f=$(echo "$q" | tr -c 'a-zA-Z0-9' '-' | cut -c1-40)
+              # shellcheck disable=SC2086
+              docker exec "$c" k0s kubectl $q > "diagnostics/$n.$f.txt" 2>&1 || true
+            done
+          done
+          echo "::group::pods"; cat diagnostics/*get-pods* 2>/dev/null || true; echo "::endgroup::"
+          echo "::group::events"; tail -n 50 diagnostics/*events* 2>/dev/null || true; echo "::endgroup::"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: e2e-diagnostics-${{ matrix.scenario.name }}
+          path: |
+            e2e.log
+            diagnostics/

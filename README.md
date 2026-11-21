@@ -181,7 +181,15 @@ go test -tags e2e ./test/e2e/... -timeout 20m   # spins up real clusters
 ~~~
 
 CI (`.github/workflows/ci.yml`) runs three jobs: `lint-build` (gofmt/vet/build),
-`unit`, and `e2e` (a matrix of the single-node and 1cp+2w scenarios).
+`unit`, and `e2e` — one job per `Test*` in `test/e2e`, so a scenario can fail
+on its own without hiding the others. `TestE2EMatrixIsComplete` fails the unit
+job if a test and the CI matrix ever drift apart.
+
+`unit` prints one line per test, puts the counts, coverage and any failures in
+the job summary, and uploads `cover.out`, `coverage.html` and the raw
+`go test -json` stream. A failing `e2e` job uploads an
+`e2e-diagnostics-<scenario>` artifact: the test log, every node's docker log,
+and the cluster's pods, nodes, events and describes.
 
 ## Releasing
 
