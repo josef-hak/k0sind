@@ -82,8 +82,32 @@ k0sind get clusters
 k0sind get nodes -n dev
 k0sind get kubeconfig -n dev
 k0sind export kubeconfig -n dev
+k0sind export logs -n dev ./dump   # diagnostics; omit the dir for a tempdir
 k0sind delete cluster -n dev
 ~~~
+
+### Exporting logs
+
+`k0sind export logs [output-dir]` collects what it takes to work out why a
+cluster misbehaved, and is the thing to attach to a bug report. The collection
+is container-level on purpose: a cluster worth exporting logs from is usually
+one whose API server never came up, so the parts that go through kubectl are
+the first to stop working.
+
+~~~
+docker-info.txt                      the daemon and host it ran on
+<node>/serial.log                    k0s's own output: it supervises etcd,
+                                     the API server and the kubelet
+<node>/pods/**                       every container's stdout, from the
+                                     kubelet's /var/log/pods
+<node>/inspect.json                  the container as docker sees it
+<node>/k0s-status.txt, k0s-version.txt, images.log
+<control-plane>/kubectl-*.txt        nodes, pods, events, describes
+~~~
+
+A collector that fails still writes its file, holding the error. An empty
+`kubectl-pods.txt` and one saying the API server refused the connection mean
+very different things to whoever reads the dump.
 
 ### Advanced usage
 ~~~bash

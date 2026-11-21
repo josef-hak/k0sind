@@ -259,6 +259,31 @@ func (c *Client) CopyTo(src, container, dest string) error {
 	return err
 }
 
+// CopyFrom copies src out of container to the local path dest.
+func (c *Client) CopyFrom(container, src, dest string) error {
+	_, err := c.r.Output("cp", container+":"+src, dest)
+	return err
+}
+
+// Logs returns everything the container has written to stdout and stderr. On a
+// k0s node that is k0s itself, which supervises the control-plane components
+// and the kubelet, so it is the first place to look when a node does not come
+// up.
+func (c *Client) Logs(container string) (string, error) {
+	return c.r.Output("logs", container)
+}
+
+// Inspect returns `docker inspect` JSON for a container.
+func (c *Client) Inspect(container string) (string, error) {
+	return c.r.Output("inspect", container)
+}
+
+// Info returns `docker info`, which records the daemon and host the cluster ran
+// on.
+func (c *Client) Info() (string, error) {
+	return c.r.Output("info")
+}
+
 // Remove force-removes containers by ID or name (with their anonymous volumes).
 func (c *Client) Remove(ids ...string) error {
 	if len(ids) == 0 {

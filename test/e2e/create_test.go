@@ -57,6 +57,47 @@ func TestKubeletRootDirOverride(t *testing.T) {
 	assertKubeletRootDir(t, name+"-control-plane", "/var/lib/kubelet", "/var/lib/k0s/kubelet")
 }
 
+// TestExportLogs checks the dump on a cluster that has been stopped, which is
+// the state it exists for: the control plane answers nothing, and what is left
+// must still reach the disk.
+func TestExportLogs(t *testing.T) {
+	bin := k0sindBin(t)
+	const name = "ci-logs"
+	cp := name + "-control-plane"
+	t.Cleanup(func() { _ = run(t, bin, "delete", "cluster", "--name", name) })
+
+	if err := run(t, bin, "create", "cluster", "--name", name, "--wait", "120s"); err != nil {
+		t.Fatalf("%s create cluster: %v", markFail, err)
+	}
+	if out, err := docker(t, "stop", cp); err != nil {
+		t.Fatalf("%s stop %s: %v\n%s", markFail, cp, err, out)
+	}
+
+	dir := t.TempDir()
+	if err := run(t, bin, "export", "logs", "--name", name, dir); err != nil {
+		t.Fatalf("%s export logs: %v", markFail, err)
+	}
+
+	// serial.log and the pod logs come from the container and its volume, so a
+	// dead node does not take them with it; the kubectl dumps are allowed to
+	// hold nothing but the error that explains why.
+	for _, f := range []string{"docker-info.txt", cp + "/serial.log", cp + "/inspect.json"} {
+		info, err := os.Stat(filepath.Join(dir, f))
+		if err != nil {
+			t.Errorf("%s missing %s: %v", markFail, f, err)
+			continue
+		}
+		if info.Size() == 0 {
+			t.Errorf("%s %s is empty", markFail, f)
+		}
+	}
+	pods, err := filepath.Glob(filepath.Join(dir, cp, "pods", "*", "*", "*.log"))
+	if err != nil || len(pods) == 0 {
+		t.Fatalf("%s no pod logs collected (%v)", markFail, err)
+	}
+	t.Logf("%s exported %d pod log(s) from a stopped node", markOK, len(pods))
+}
+
 func TestCreateOneControlPlaneTwoWorkers(t *testing.T) {
 	t.Parallel()
 	runScenario(t, "ci-multi", []string{"--config", "../../examples/multi-node.yaml"}, 3, 180*time.Second)

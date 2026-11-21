@@ -2,6 +2,8 @@ package cluster
 
 import (
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -62,5 +64,83 @@ func TestPrepareNodeWrapsError(t *testing.T) {
 	// error does not say which one failed.
 	if !strings.Contains(err.Error(), "ci-worker") {
 		t.Fatalf("error %q does not name the node", err)
+	}
+}
+
+func TestExportLogsCollectsPerNodeArtifacts(t *testing.T) {
+	p, r := testProvider()
+	r.output = "abc123\tdev-control-plane\tio.k0sind.cluster=dev"
+	dir := t.TempDir()
+
+	got, err := p.ExportLogs("dev", dir)
+	if err != nil {
+		t.Fatalf("ExportLogs: %v", err)
+	}
+	if got != dir {
+		t.Errorf("returned %q, want %q", got, dir)
+	}
+
+	for _, f := range []string{
+		"docker-info.txt",
+		"dev-control-plane/inspect.json",
+		"dev-control-plane/serial.log",
+		"dev-control-plane/k0s-status.txt",
+		"dev-control-plane/images.log",
+		"dev-control-plane/kubectl-pods.txt",
+		"dev-control-plane/kubectl-events.txt",
+	} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Errorf("missing %s: %v", f, err)
+		}
+	}
+
+	// The two collectors that keep working when the control plane does not.
+	wantCalls := [][]string{
+		{"logs", "dev-control-plane"},
+		{"cp", "dev-control-plane:/var/log/pods", filepath.Join(dir, "dev-control-plane", "pods")},
+	}
+	for _, want := range wantCalls {
+		found := false
+		for _, call := range r.calls {
+			if reflect.DeepEqual(call, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing docker call %v\ngot: %v", want, r.calls)
+		}
+	}
+}
+
+// A node that does not answer must still produce files: which collector failed,
+// and why, is itself the diagnosis.
+func TestExportLogsRecordsFailuresInTheFiles(t *testing.T) {
+	p, r := testProvider()
+	r.output = "abc123\tdev-control-plane\tio.k0sind.cluster=dev"
+	dir := t.TempDir()
+	if _, err := p.ExportLogs("dev", dir); err != nil {
+		t.Fatalf("ExportLogs: %v", err)
+	}
+
+	// Same again, with every docker call failing.
+	r.calls, r.err = nil, io.ErrUnexpectedEOF
+	failDir := t.TempDir()
+	_, err := p.ExportLogs("dev", failDir)
+	if err == nil {
+		t.Fatal("expected an error when the cluster cannot be listed")
+	}
+
+	status := filepath.Join(dir, "dev-control-plane", "k0s-status.txt")
+	if _, err := os.Stat(status); err != nil {
+		t.Fatalf("k0s-status.txt should exist even so: %v", err)
+	}
+}
+
+func TestExportLogsRejectsUnknownCluster(t *testing.T) {
+	p, r := testProvider()
+	r.output = "" // no containers match
+	if _, err := p.ExportLogs("nope", t.TempDir()); err == nil {
+		t.Fatal("expected an error for a cluster with no nodes")
 	}
 }

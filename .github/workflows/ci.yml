@@ -116,6 +116,8 @@ jobs:
             test: TestCreateWithCalico
           - name: k0s-openebs
             test: TestCreateWithOpenEBS
+          - name: export-logs
+            test: TestExportLogs
           - name: kubeconfig-flag
             test: TestKubeconfigFlag
           - name: kubelet-config
