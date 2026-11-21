@@ -42,16 +42,16 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      # -json keeps the machine-readable record in gotest.jsonl for the summary
-      # below, while the jq filter prints one line per test so the log reads as
-      # a list of what ran rather than a wall of package results.
+      # gotestsum is a tool dependency in go.mod, so there is nothing to install
+      # and Dependabot keeps it current. --format testname prints a line per
+      # test; --no-color=false forces the green PASS / red FAIL that it would
+      # otherwise drop on a non-TTY, which Actions renders fine. The jsonfile
+      # feeds the summary below, the junitfile is for whatever reads reports.
       - name: Unit tests (no docker)
         run: |
-          set -o pipefail
-          go test ./... -race -covermode=atomic -coverprofile=cover.out -json \
-            | tee gotest.jsonl \
-            | jq -r 'select(.Test != null and (.Action == "pass" or .Action == "fail" or .Action == "skip"))
-                     | "\(.Action | ascii_upcase) \(.Package | sub("^github.com/k0sproject/k0sind/?"; "") ) \(.Test) (\(.Elapsed)s)"'
+          go tool gotestsum --format testname --no-color=false \
+            --jsonfile gotest.jsonl --junitfile junit.xml \
+            -- ./... -race -covermode=atomic -coverprofile=cover.out
       # Failures scroll off the top of a long log; the job summary is the first
       # thing a PR shows, so put the counts and the failed names there.
       - name: Test summary
@@ -93,6 +93,7 @@ jobs:
             cover.out
             coverage.html
             gotest.jsonl
+            junit.xml
 
   e2e:
     # Independent of lint-build/unit so it runs in parallel with them (e2e is the

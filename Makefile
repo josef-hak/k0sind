@@ -15,7 +15,7 @@ install:
 
 ## test: run unit tests (no docker)
 test:
-	go test ./... -race
+	go tool gotestsum --format testname -- ./... -race
 
 ## vet: static analysis
 vet:

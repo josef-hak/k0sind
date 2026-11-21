@@ -176,9 +176,15 @@ k0sind create cluster --kubelet-root-dir /var/lib/kubelet
 
 ~~~bash
 go build ./...
-go test ./... -race            # unit tests, no docker
+make test                      # unit tests, no docker; colored per-test output
+go test ./... -race            # the same, without gotestsum
 go test -tags e2e ./test/e2e/... -timeout 20m   # spins up real clusters
 ~~~
+
+`make test` goes through [gotestsum](https://github.com/gotestyourself/gotestsum),
+a tool dependency in `go.mod` — no install step, and Dependabot keeps it
+current. It is test tooling only: `tool` directives are not linked into the
+built binary.
 
 CI (`.github/workflows/ci.yml`) runs three jobs: `lint-build` (gofmt/vet/build),
 `unit`, and `e2e` — one job per `Test*` in `test/e2e`, so a scenario can fail
