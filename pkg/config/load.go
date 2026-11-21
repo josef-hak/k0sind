@@ -17,6 +17,10 @@ const (
 	DefaultClusterName = "k0sind"
 	// DefaultAPIServerAddress is where the API server is exposed on the host.
 	DefaultAPIServerAddress = "127.0.0.1"
+	// GroupVersion is the kind config schema this package reads.
+	GroupVersion = "kind.x-k8s.io/v1alpha4"
+	// clusterKind is the only document kind a cluster config may declare.
+	clusterKind = "Cluster"
 )
 
 // Load reads a kind-style config from path (empty path = a default single
@@ -33,6 +37,9 @@ func Load(path string) (*v1alpha4.Cluster, []string, error) {
 		if err := yaml.UnmarshalStrict(data, c); err != nil {
 			return nil, nil, fmt.Errorf("parse kind config %q: %w", path, err)
 		}
+		if err := checkTypeMeta(c); err != nil {
+			return nil, nil, fmt.Errorf("parse kind config %q: %w", path, err)
+		}
 	}
 	applyDefaults(c)
 	warnings := unsupportedWarnings(c)
@@ -40,6 +47,21 @@ func Load(path string) (*v1alpha4.Cluster, []string, error) {
 		return nil, warnings, err
 	}
 	return c, warnings, nil
+}
+
+// checkTypeMeta rejects a file written against a different schema, so that a
+// k0s.yaml or a kubeadm manifest passed to --config fails loudly instead of
+// parsing as an empty cluster and silently becoming the default single node.
+// kind requires both fields; we only insist they are right when present, so a
+// terse nodes-only config keeps working.
+func checkTypeMeta(c *v1alpha4.Cluster) error {
+	if v := c.APIVersion; v != "" && v != GroupVersion {
+		return fmt.Errorf("unsupported apiVersion %q: want %q", v, GroupVersion)
+	}
+	if k := c.Kind; k != "" && k != clusterKind {
+		return fmt.Errorf("unsupported kind: want %q, got %q", clusterKind, k)
+	}
+	return nil
 }
 
 // applyDefaults fills in the same defaults kind uses for the fields we honor.
@@ -57,7 +79,7 @@ func applyDefaults(c *v1alpha4.Cluster) {
 	}
 }
 
-// validate enforces the 0.1.0 topology limits.
+// validate enforces the topology limits k0sind can currently build.
 func validate(c *v1alpha4.Cluster) error {
 	var controlPlanes, workers int
 	for _, n := range c.Nodes {
@@ -74,7 +96,7 @@ func validate(c *v1alpha4.Cluster) error {
 	case controlPlanes == 0:
 		return fmt.Errorf("config has no control-plane node")
 	case controlPlanes > 1:
-		return fmt.Errorf("k0sind 0.1.0 supports a single control-plane node, got %d "+
+		return fmt.Errorf("k0sind supports a single control-plane node, got %d "+
 			"(multi-controller HA is planned for a later release)", controlPlanes)
 	}
 	return nil
@@ -114,6 +136,9 @@ func unsupportedWarnings(c *v1alpha4.Cluster) []string {
 	}
 	if c.Networking.IPFamily != "" && c.Networking.IPFamily != v1alpha4.IPv4Family {
 		add("networking.ipFamily (only ipv4 is supported)")
+	}
+	if c.Networking.DNSSearch != nil {
+		add("networking.dnsSearch")
 	}
 	for i := range c.Nodes {
 		if len(c.Nodes[i].KubeadmConfigPatches) > 0 || len(c.Nodes[i].KubeadmConfigPatchesJSON6902) > 0 {

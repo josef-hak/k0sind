@@ -128,7 +128,7 @@ the parts of the kind schema that map to k0s and warns about the rest.
 | `name`, `nodes[].role`, `nodes[].image` | `kubeadmConfigPatches` for other kinds, `kubeadmConfigPatchesJSON6902` |
 | `nodes[].extraPortMappings` | `containerdConfigPatches*` |
 | `nodes[].extraMounts` | `networking.disableDefaultCNI`, `kubeProxyMode` |
-| `networking.apiServerAddress`, `apiServerPort` | `podSubnet`, `serviceSubnet`, `featureGates`, `runtimeConfig` |
+| `networking.apiServerAddress`, `apiServerPort` | `podSubnet`, `serviceSubnet`, `dnsSearch`, `featureGates`, `runtimeConfig` |
 | `kubeadmConfigPatches` of kind `KubeletConfiguration` | |
 
 These are ignored because k0s does not use kubeadm and manages CNI/networking
